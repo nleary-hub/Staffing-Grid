@@ -250,6 +250,11 @@ table input[type="number"] { min-width: 58px; }
   to { background: transparent; }
 }
 
+.prod-tools {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 10px; font-size: 12.5px; color: var(--ink-soft); font-weight: 600;
+}
+
 /* column picker */
 .col-picker { position: relative; display: inline-block; }
 .col-panel {

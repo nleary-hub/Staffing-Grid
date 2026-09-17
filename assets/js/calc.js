@@ -217,7 +217,14 @@
       viewOptions: {
         hiddenColumns: Array.isArray(seed.viewOptions && seed.viewOptions.hiddenColumns)
           ? seed.viewOptions.hiddenColumns.slice()
-          : []
+          : [],
+        hiddenProdDayColumns: Array.isArray(seed.viewOptions && seed.viewOptions.hiddenProdDayColumns)
+          ? seed.viewOptions.hiddenProdDayColumns.slice()
+          : [],
+        hiddenProdPersonColumns: Array.isArray(seed.viewOptions && seed.viewOptions.hiddenProdPersonColumns)
+          ? seed.viewOptions.hiddenProdPersonColumns.slice()
+          : [],
+        volumeBasis: (seed.viewOptions && seed.viewOptions.volumeBasis) === 'even' ? 'even' : 'proportional'
       },
       positions: (seed.positions || []).map(newPosition),
       createdAt: seed.createdAt || new Date().toISOString(),
@@ -355,17 +362,44 @@
 
     /* --- productivity: volume required to run the designed model at 100% --- */
     var budgetedDailyVolume = div(annualVolume, daysPerYear);
+    var weeklyBudgetedVolume = budgetedDailyVolume * 7;
     var requiredAnnualVolume = div(designedAnnualWorkedHours, whpu);
+
+    /*
+     * How the week's budgeted volume is spread across the days.
+     *
+     * 'proportional' (the default) gives each day the share of the week's
+     * volume that matches its share of the scheduled hours, so a day staffed
+     * twice as heavily is expected to carry twice the volume. Comparing a
+     * heavily staffed Monday against a flat daily average otherwise makes
+     * every busy day look short and every quiet day look generous.
+     *
+     * 'even' keeps the flat annual-volume / days-per-year figure, which is how
+     * a budget is usually quoted. Either way the seven days still add up to
+     * the same week.
+     */
+    var volumeBasis = (model && model.viewOptions && model.viewOptions.volumeBasis) === 'even'
+      ? 'even' : 'proportional';
+    var canApportion = volumeBasis === 'proportional' && designedWeeklyHours > 0;
+
+    function budgetedForDay(i) {
+      if (!canApportion) return budgetedDailyVolume;
+      return weeklyBudgetedVolume * div(dailyHours[i], designedWeeklyHours);
+    }
+
     var byDay = DAYS.map(function (d, i) {
       var required = div(dailyHours[i], whpu);
+      var budgetedForThisDay = budgetedForDay(i);
       return {
         key: d,
         name: DAY_NAMES[i],
         hours: dailyHours[i],
         eightHourEquivalents: div(dailyHours[i], 8),
+        hoursShareOfWeek: div(dailyHours[i], designedWeeklyHours),
         requiredUnits: required,
-        budgetedUnits: budgetedDailyVolume,
-        varianceUnits: required - budgetedDailyVolume
+        budgetedUnits: budgetedForThisDay,
+        varianceUnits: required - budgetedForThisDay,
+        productivityIndex: div(budgetedForThisDay, required)
       };
     });
     var byPosition = positions.map(function (p) {
@@ -388,6 +422,9 @@
 
     var productivity = {
       whpu: whpu,
+      volumeBasis: canApportion ? 'proportional' : 'even',
+      volumeBasisRequested: volumeBasis,
+      weeklyBudgetedVolume: weeklyBudgetedVolume,
       // earned hours / actual hours on the designed model
       productivityIndex: div(budgetWorkedHours, designedAnnualWorkedHours),
       requiredAnnualVolume: requiredAnnualVolume,

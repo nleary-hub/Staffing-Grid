@@ -247,38 +247,67 @@
       <div class="stats" id="prod-stats"></div>
 
       <div class="tab-panel active" id="tab-day" style="margin-top:14px">
+        <div class="prod-tools">
+          <label for="f-volumeBasis" style="margin:0">Spread budgeted volume</label>
+          <select id="f-volumeBasis" style="width:auto;min-width:250px">
+            <option value="proportional">Proportional to the hours scheduled each day</option>
+            <option value="even">Evenly across every day</option>
+          </select>
+          <div class="col-picker">
+            <button type="button" id="btn-prod-day-columns" aria-expanded="false" aria-controls="prod-day-panel">Columns <span id="prod-day-col-count"></span> &#9662;</button>
+            <div class="col-panel" id="prod-day-panel" hidden>
+              <div class="col-panel-head">
+                <strong>Show columns</strong>
+                <button type="button" id="btn-prod-day-columns-all" class="icon">Show all</button>
+              </div>
+              <div id="prod-day-column-list"></div>
+            </div>
+          </div>
+        </div>
         <div class="table-wrap">
           <table id="prod-day-table">
             <thead>
               <tr>
-                <th style="text-align:left">Day</th>
-                <th class="num">Scheduled worked hours</th>
-                <th class="num">8-hour equivalents</th>
-                <th class="num" id="th-required-day">Required volume @100%</th>
-                <th class="num" id="th-budgeted-day">Budgeted avg volume/day</th>
-                <th class="num">Variance</th>
+                <th data-col="day" style="text-align:left">Day</th>
+                <th data-col="hours" class="num">Scheduled worked hours</th>
+                <th data-col="eight" class="num">8-hour equivalents</th>
+                <th data-col="required" class="num" id="th-required-day">Required volume @100%</th>
+                <th data-col="budgeted" class="num" id="th-budgeted-day">Budgeted avg volume/day</th>
+                <th data-col="variance" class="num">Variance</th>
               </tr>
             </thead>
             <tbody id="prod-day-body"></tbody>
             <tfoot id="prod-day-foot"></tfoot>
           </table>
         </div>
-        <div class="legend">A positive variance means the schedule on that day needs <em>more</em> volume than budget delivers &mdash; those hours will run below 100% productivity.</div>
+        <div class="legend" id="day-legend"></div>
       </div>
 
       <div class="tab-panel" id="tab-person" style="margin-top:14px">
+        <div class="prod-tools">
+          <div class="col-picker">
+            <button type="button" id="btn-prod-person-columns" aria-expanded="false" aria-controls="prod-person-panel">Columns <span id="prod-person-col-count"></span> &#9662;</button>
+            <div class="col-panel" id="prod-person-panel" hidden>
+              <div class="col-panel-head">
+                <strong>Show columns</strong>
+                <button type="button" id="btn-prod-person-columns-all" class="icon">Show all</button>
+              </div>
+              <div id="prod-person-column-list"></div>
+            </div>
+          </div>
+        </div>
         <div class="table-wrap">
           <table id="prod-person-table">
             <thead>
               <tr>
-                <th style="text-align:left">Role</th>
-                <th style="text-align:left">Assigned to</th>
-                <th style="text-align:left">Shift</th>
-                <th class="num">Qty</th>
-                <th class="num day">Sun</th><th class="num day">Mon</th><th class="num day">Tue</th>
-                <th class="num day">Wed</th><th class="num day">Thu</th><th class="num day">Fri</th><th class="num day">Sat</th>
-                <th class="num">Per person / week</th>
-                <th class="num">Row total / week</th>
+                <th data-col="role" style="text-align:left">Role</th>
+                <th data-col="assignee" style="text-align:left">Assigned to</th>
+                <th data-col="shift" style="text-align:left">Shift</th>
+                <th data-col="qty" class="num">Qty</th>
+                <th data-col="day0" class="num day">Sun</th><th data-col="day1" class="num day">Mon</th><th data-col="day2" class="num day">Tue</th>
+                <th data-col="day3" class="num day">Wed</th><th data-col="day4" class="num day">Thu</th><th data-col="day5" class="num day">Fri</th><th data-col="day6" class="num day">Sat</th>
+                <th data-col="perPerson" class="num">Per person / week</th>
+                <th data-col="rowTotal" class="num">Row total / week</th>
               </tr>
             </thead>
             <tbody id="prod-person-body"></tbody>

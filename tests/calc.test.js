@@ -114,13 +114,14 @@ test('an unset budget never trips the over-budget flag', () => {
 });
 
 test('required volume per day = scheduled hours / WHpU', () => {
-  const r = SGCalc.computeModel(model({ budget: { whpu: 8 } }, [
-    { qty: 2, hours: [16, 0, 0, 0, 0, 0, 0] }   // 32 hrs on Sunday
-  ]));
-  const sun = r.productivity.byDay[0];
+  const m = model({ budget: { whpu: 8 } }, [
+    { qty: 2, hours: [16, 0, 0, 0, 0, 0, 0] }   // 32 hrs on Sunday, nothing else
+  ]);
+  m.viewOptions.volumeBasis = 'even';
+  const sun = SGCalc.computeModel(m).productivity.byDay[0];
   close(sun.hours, 32);
   close(sun.requiredUnits, 4);                  // 32 / 8
-  close(sun.budgetedUnits, 30);
+  close(sun.budgetedUnits, 30);                 // flat: annual volume / 365
   close(sun.varianceUnits, -26);
   close(sun.eightHourEquivalents, 4);
 });
@@ -501,4 +502,82 @@ test('reordering positions preserves every row and its data', () => {
   close(after.designed.wFTE, before.designed.wFTE);
   close(after.designed.weeklyHours, before.designed.weeklyHours);
   assert.deepStrictEqual(after.designed.dailyHours, before.designed.dailyHours);
+});
+
+
+/* ---------------- how budgeted volume is spread across the week ---------------- */
+
+function weekModel(basis) {
+  const m = model({ budget: { annualVolume: 14600, whpu: 2, volumeUnit: 'Encounters' } }, [
+    // Mon-Fri staffed three deep, weekends one deep
+    timed([OFF, T('0700', '1900'), T('0700', '1900'), T('0700', '1900'), T('0700', '1900'), T('0700', '1900'), OFF], { qty: 3 }),
+    timed([T('0700', '1900'), OFF, OFF, OFF, OFF, OFF, T('0700', '1900')], { qty: 1 })
+  ]);
+  m.viewOptions.volumeBasis = basis;
+  return SGCalc.computeModel(m);
+}
+
+test('budgeted volume defaults to being spread in proportion to scheduled hours', () => {
+  assert.strictEqual(SGCalc.newModel().viewOptions.volumeBasis, 'proportional');
+
+  const r = weekModel('proportional');
+  const days = r.productivity.byDay;
+  close(days[0].hours, 12);    // Sunday: one person
+  close(days[1].hours, 36);    // Monday: three people
+
+  // Monday carries three times Sunday's hours, so three times the volume
+  close(days[1].budgetedUnits, days[0].budgetedUnits * 3);
+  close(days[0].hoursShareOfWeek, 12 / 204);
+  close(days[1].budgetedUnits, r.productivity.weeklyBudgetedVolume * (36 / 204));
+  assert.strictEqual(r.productivity.volumeBasis, 'proportional');
+});
+
+test('the seven days still add up to the same week on either basis', () => {
+  for (const basis of ['proportional', 'even']) {
+    const r = weekModel(basis);
+    const sum = r.productivity.byDay.reduce((a, d) => a + d.budgetedUnits, 0);
+    close(sum, r.productivity.weeklyBudgetedVolume);
+    close(sum, r.budget.avgDailyVolume * 7);
+  }
+});
+
+test('an even spread gives every day the flat daily average', () => {
+  const r = weekModel('even');
+  r.productivity.byDay.forEach(d => close(d.budgetedUnits, r.budget.avgDailyVolume));
+  assert.strictEqual(r.productivity.volumeBasis, 'even');
+});
+
+test('proportional spread leaves the annual totals alone', () => {
+  const prop = weekModel('proportional');
+  const even = weekModel('even');
+  close(prop.designed.wFTE, even.designed.wFTE);
+  close(prop.productivity.requiredAnnualVolume, even.productivity.requiredAnnualVolume);
+  close(prop.productivity.volumeGap, even.productivity.volumeGap);
+  close(prop.productivity.productivityIndex, even.productivity.productivityIndex);
+  // per-day required volume is driven by hours, so it never moves either
+  assert.deepStrictEqual(prop.productivity.byDay.map(d => d.requiredUnits),
+                         even.productivity.byDay.map(d => d.requiredUnits));
+});
+
+test('an unstaffed day gets no share, and an empty grid falls back to the flat average', () => {
+  const r = weekModel('proportional');
+  const m = model({ budget: { annualVolume: 3650, whpu: 4 } }, []);
+  const empty = SGCalc.computeModel(m);
+
+  close(r.productivity.byDay[0].hours, 12);
+  assert.ok(r.productivity.byDay.every(d => d.hours > 0 || d.budgetedUnits === 0));
+
+  // no positions at all: nothing to apportion by, so it reports the even basis
+  assert.strictEqual(empty.productivity.volumeBasis, 'even');
+  empty.productivity.byDay.forEach(d => close(d.budgetedUnits, 10));
+});
+
+test('productivity column choices are stored per table', () => {
+  const m = SGCalc.newModel({
+    viewOptions: { hiddenProdDayColumns: ['eight'], hiddenProdPersonColumns: ['qty', 'day6'] }
+  });
+  assert.deepStrictEqual(m.viewOptions.hiddenProdDayColumns, ['eight']);
+  assert.deepStrictEqual(m.viewOptions.hiddenProdPersonColumns, ['qty', 'day6']);
+  assert.deepStrictEqual(SGCalc.newModel().viewOptions.hiddenProdDayColumns, []);
+  assert.deepStrictEqual(SGCalc.newModel().viewOptions.hiddenProdPersonColumns, []);
 });

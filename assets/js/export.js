@@ -163,14 +163,19 @@
     var byDay = [
       [{ v: 'Volume required for 100% productivity — by day of week', s: 'title' }],
       [{ v: 'Required ' + unit + ' = scheduled worked hours ÷ WHpU (' +
-        (r.budget.whpu || 0).toFixed(2) + ')', s: 'subtitle' }],
+        (r.budget.whpu || 0).toFixed(2) + ').  Budgeted ' + unit.toLowerCase() + ' spread ' +
+        (r.productivity.volumeBasis === 'proportional'
+          ? 'in proportion to the hours scheduled each day.'
+          : 'evenly across every day.'), s: 'subtitle' }],
       blank,
       [
         { v: 'Day', s: 'header' },
         { v: 'Scheduled worked hours', s: 'header' },
         { v: '8-hour equivalents', s: 'header' },
         { v: 'Required ' + unit + ' @100%', s: 'header' },
-        { v: 'Budgeted avg ' + unit + '/day', s: 'header' },
+        { v: r.productivity.volumeBasis === 'proportional'
+            ? 'Budgeted ' + unit + ' for that day'
+            : 'Budgeted avg ' + unit + '/day', s: 'header' },
         { v: 'Variance (required − budgeted)', s: 'header' }
       ]
     ];
@@ -190,8 +195,8 @@
       { v: r.designed.weeklyHours, s: 'totalNum1' },
       { v: r.designed.weeklyHours / 8, s: 'totalNum1' },
       { v: r.productivity.requiredWeeklyVolume, s: 'totalNum2' },
-      { v: r.budget.avgDailyVolume * 7, s: 'totalNum2' },
-      { v: r.productivity.requiredWeeklyVolume - r.budget.avgDailyVolume * 7, s: 'totalNum2' }
+      { v: r.productivity.weeklyBudgetedVolume, s: 'totalNum2' },
+      { v: r.productivity.requiredWeeklyVolume - r.productivity.weeklyBudgetedVolume, s: 'totalNum2' }
     ]);
     byDay.push(blank);
     byDay.push([{ v: 'Annual ' + unit + ' required @ 100% productivity', s: 'label' },

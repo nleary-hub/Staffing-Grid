@@ -30,6 +30,51 @@
     { key: 'pFTE', label: 'pFTE', group: 'Calculated' }
   ];
 
+  var PROD_DAY_COLUMNS = [
+    { key: 'day', label: 'Day', group: 'Columns' },
+    { key: 'hours', label: 'Scheduled worked hours', group: 'Columns' },
+    { key: 'eight', label: '8-hour equivalents', group: 'Columns' },
+    { key: 'required', label: 'Required volume @100%', group: 'Columns' },
+    { key: 'budgeted', label: 'Budgeted volume', group: 'Columns' },
+    { key: 'variance', label: 'Variance', group: 'Columns' }
+  ];
+
+  var PROD_PERSON_COLUMNS = [
+    { key: 'role', label: 'Role', group: 'Position' },
+    { key: 'assignee', label: 'Assigned to', group: 'Position' },
+    { key: 'shift', label: 'Shift', group: 'Position' },
+    { key: 'qty', label: 'Qty', group: 'Position' },
+    { key: 'day0', label: 'Sunday', group: 'Days' },
+    { key: 'day1', label: 'Monday', group: 'Days' },
+    { key: 'day2', label: 'Tuesday', group: 'Days' },
+    { key: 'day3', label: 'Wednesday', group: 'Days' },
+    { key: 'day4', label: 'Thursday', group: 'Days' },
+    { key: 'day5', label: 'Friday', group: 'Days' },
+    { key: 'day6', label: 'Saturday', group: 'Days' },
+    { key: 'perPerson', label: 'Per person / week', group: 'Totals' },
+    { key: 'rowTotal', label: 'Row total / week', group: 'Totals' }
+  ];
+
+  // Every table that supports hiding columns, described once so the picker,
+  // the persistence and the show/hide all work the same way for each.
+  var COLUMN_SETS = {
+    grid: {
+      columns: COLUMNS, store: 'hiddenColumns', table: '#grid-table',
+      btn: '#btn-columns', panel: '#column-panel', list: '#column-list',
+      count: '#col-count', all: '#btn-columns-all'
+    },
+    prodDay: {
+      columns: PROD_DAY_COLUMNS, store: 'hiddenProdDayColumns', table: '#prod-day-table',
+      btn: '#btn-prod-day-columns', panel: '#prod-day-panel', list: '#prod-day-column-list',
+      count: '#prod-day-col-count', all: '#btn-prod-day-columns-all'
+    },
+    prodPerson: {
+      columns: PROD_PERSON_COLUMNS, store: 'hiddenProdPersonColumns', table: '#prod-person-table',
+      btn: '#btn-prod-person-columns', panel: '#prod-person-panel', list: '#prod-person-column-list',
+      count: '#prod-person-col-count', all: '#btn-prod-person-columns-all'
+    }
+  };
+
   var dragFrom = null;   // index of the row being dragged
 
   var state = {
@@ -108,54 +153,66 @@
   }
 
   /* ---------- column visibility ---------- */
-  function hiddenSet() {
-    var vo = state.model.viewOptions || (state.model.viewOptions = { hiddenColumns: [] });
-    if (!Array.isArray(vo.hiddenColumns)) vo.hiddenColumns = [];
-    return vo.hiddenColumns;
+  function viewOptions() {
+    var vo = state.model.viewOptions || (state.model.viewOptions = {});
+    return vo;
   }
 
-  function isHidden(key) {
-    return hiddenSet().indexOf(key) >= 0;
+  function hiddenSet(setId) {
+    var vo = viewOptions(), key = COLUMN_SETS[setId].store;
+    if (!Array.isArray(vo[key])) vo[key] = [];
+    return vo[key];
   }
 
-  function setColumnHidden(key, hidden) {
-    var list = hiddenSet();
+  function isHidden(setId, key) {
+    return hiddenSet(setId).indexOf(key) >= 0;
+  }
+
+  function setColumnHidden(setId, key, hidden) {
+    var list = hiddenSet(setId);
     var at = list.indexOf(key);
     if (hidden && at < 0) list.push(key);
     if (!hidden && at >= 0) list.splice(at, 1);
     markDirty(true);
-    applyColumnVisibility();
-    renderColumnPanel();
+    applyColumnVisibility(setId);
+    renderColumnPanel(setId);
   }
 
   // Toggling display on the cells themselves keeps colspan-free rows honest and
   // survives a re-render, since every cell carries its own data-col.
-  function applyColumnVisibility() {
-    var hidden = hiddenSet();
-    $$('#grid-table [data-col]').forEach(function (cell) {
+  function applyColumnVisibility(setId) {
+    if (!setId) { Object.keys(COLUMN_SETS).forEach(applyColumnVisibility); return; }
+    var set = COLUMN_SETS[setId];
+    var hidden = hiddenSet(setId);
+    $$(set.table + ' [data-col]').forEach(function (cell) {
       var key = cell.getAttribute('data-col');
       cell.style.display = hidden.indexOf(key) >= 0 ? 'none' : '';
     });
-    var n = hidden.length;
-    $('#col-count').textContent = n ? '(' + (COLUMNS.length - n) + '/' + COLUMNS.length + ')' : '';
+    var total = set.columns.length;
+    var shown = total - hidden.filter(function (k) {
+      return set.columns.some(function (c) { return c.key === k; });
+    }).length;
+    $(set.count).textContent = shown === total ? '' : '(' + shown + '/' + total + ')';
   }
 
-  function renderColumnPanel() {
-    var list = $('#column-list');
+  function renderColumnPanel(setId) {
+    if (!setId) { Object.keys(COLUMN_SETS).forEach(renderColumnPanel); return; }
+    var set = COLUMN_SETS[setId];
+    var list = $(set.list);
     list.innerHTML = '';
     var groups = [];
-    COLUMNS.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
+    set.columns.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
 
     groups.forEach(function (g) {
-      list.appendChild(el('div', { class: 'col-group-name', text: g }));
-      COLUMNS.filter(function (c) { return c.group === g; }).forEach(function (c) {
+      if (groups.length > 1 || g !== 'Columns') list.appendChild(el('div', { class: 'col-group-name', text: g }));
+      set.columns.filter(function (c) { return c.group === g; }).forEach(function (c) {
+        var id = 'col-' + setId + '-' + c.key;
         var box = el('input', {
-          type: 'checkbox',
-          id: 'col-' + c.key,
-          onchange: function (e) { setColumnHidden(c.key, !e.target.checked); }
+          type: 'checkbox', id: id,
+          onchange: function (e) { setColumnHidden(setId, c.key, !e.target.checked); }
         });
-        box.checked = !isHidden(c.key);
-        list.appendChild(el('label', { class: 'col-toggle', for: 'col-' + c.key }, [
+        box.checked = !isHidden(setId, c.key);
+        list.appendChild(el('label', { class: 'col-toggle', for: id }, [
           box, el('span', { text: c.label })
         ]));
       });
@@ -588,59 +645,81 @@
       statCard('Productivity index', pct(p.productivityIndex), 'earned ÷ designed hours', p.productivityIndex < 1 ? 'bad' : 'good')
     ].forEach(function (c) { box.appendChild(c); });
 
+    var proportional = p.volumeBasis === 'proportional';
     $('#th-required-day').textContent = 'Required ' + unit + ' @ 100%';
-    $('#th-budgeted-day').textContent = 'Budgeted avg ' + unit + ' / day';
+    $('#th-budgeted-day').textContent = proportional
+      ? 'Budgeted ' + unit + ' for that day'
+      : 'Budgeted avg ' + unit + ' / day';
+    $('#f-volumeBasis').value = (state.model.viewOptions && state.model.viewOptions.volumeBasis) === 'even'
+      ? 'even' : 'proportional';
+    $('#day-legend').innerHTML = proportional
+      ? 'Each day gets the share of the week&rsquo;s budgeted ' + esc(unit.toLowerCase()) +
+        ' that matches its share of the scheduled hours, so a day staffed twice as heavily is expected to carry twice the volume. ' +
+        'The seven days still add up to the same week. A positive variance means that day needs <em>more</em> volume than its share delivers.'
+      : 'Budgeted volume is spread evenly across every day (annual volume &divide; days per year). ' +
+        'A positive variance means the schedule that day needs <em>more</em> volume than the flat average delivers.';
 
     var body = $('#prod-day-body');
     body.innerHTML = '';
     p.byDay.forEach(function (d) {
       var over = d.varianceUnits > 0.0005;
       var tr = el('tr');
-      tr.appendChild(el('td', { text: d.name }));
-      tr.appendChild(el('td', { class: 'num', text: fmt(d.hours, 1) }));
-      tr.appendChild(el('td', { class: 'num', text: fmt(d.eightHourEquivalents, 1) }));
-      tr.appendChild(el('td', { class: 'num', text: fmt(d.requiredUnits, 2) }));
-      tr.appendChild(el('td', { class: 'num', text: fmt(d.budgetedUnits, 2) }));
-      tr.appendChild(el('td', { class: 'num ' + (over ? 'flag-bad' : 'flag-good'), text: signed(d.varianceUnits, 2) }));
+      tr.appendChild(el('td', { 'data-col': 'day', text: d.name }));
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'hours', text: fmt(d.hours, 1) }));
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'eight', text: fmt(d.eightHourEquivalents, 1) }));
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'required', text: fmt(d.requiredUnits, 2) }));
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'budgeted', text: fmt(d.budgetedUnits, 2) }));
+      tr.appendChild(el('td', { class: 'num ' + (over ? 'flag-bad' : 'flag-good'), 'data-col': 'variance',
+        text: signed(d.varianceUnits, 2) }));
       body.appendChild(tr);
     });
     var foot = $('#prod-day-foot');
     foot.innerHTML = '';
-    var weekBudget = r.budget.avgDailyVolume * 7;
+    var weekBudget = p.weeklyBudgetedVolume;
     var ftr = el('tr');
-    ftr.appendChild(el('td', { text: 'Week total' }));
-    ftr.appendChild(el('td', { class: 'num', text: fmt(r.designed.weeklyHours, 1) }));
-    ftr.appendChild(el('td', { class: 'num', text: fmt(r.designed.weeklyHours / 8, 1) }));
-    ftr.appendChild(el('td', { class: 'num', text: fmt(p.requiredWeeklyVolume, 2) }));
-    ftr.appendChild(el('td', { class: 'num', text: fmt(weekBudget, 2) }));
-    ftr.appendChild(el('td', { class: 'num', text: signed(p.requiredWeeklyVolume - weekBudget, 2) }));
+    ftr.appendChild(el('td', { 'data-col': 'day', text: 'Week total' }));
+    ftr.appendChild(el('td', { class: 'num', 'data-col': 'hours', text: fmt(r.designed.weeklyHours, 1) }));
+    ftr.appendChild(el('td', { class: 'num', 'data-col': 'eight', text: fmt(r.designed.weeklyHours / 8, 1) }));
+    ftr.appendChild(el('td', { class: 'num', 'data-col': 'required', text: fmt(p.requiredWeeklyVolume, 2) }));
+    ftr.appendChild(el('td', { class: 'num', 'data-col': 'budgeted', text: fmt(weekBudget, 2) }));
+    ftr.appendChild(el('td', { class: 'num', 'data-col': 'variance',
+      text: signed(p.requiredWeeklyVolume - weekBudget, 2) }));
     foot.appendChild(ftr);
 
     var pbody = $('#prod-person-body');
     pbody.innerHTML = '';
     if (!p.byPosition.length) {
-      pbody.appendChild(el('tr', { class: 'empty-row' }, [el('td', { colspan: '13', text: 'Add positions to see the per-person breakdown.' })]));
+      pbody.appendChild(el('tr', { class: 'empty-row' }, [el('td', { colspan: '13', 'data-col': 'role', text: 'Add positions to see the per-person breakdown.' })]));
     }
     p.byPosition.forEach(function (pos) {
       var tr = el('tr');
-      tr.appendChild(el('td', { text: pos.role || '—' }));
-      tr.appendChild(el('td', { text: SGExport.assigneeLabel(pos) }));
-      tr.appendChild(el('td', { text: pos.shiftDisplay || '—' }));
-      tr.appendChild(el('td', { class: 'num', text: fmt(pos.qty, 1) }));
-      pos.dayUnits.forEach(function (u) { tr.appendChild(el('td', { class: 'num', text: u ? fmt(u, 2) : '—' })); });
-      tr.appendChild(el('td', { class: 'num calc', text: fmt(pos.weeklyUnitsPerPerson, 2) }));
-      tr.appendChild(el('td', { class: 'num calc', text: fmt(pos.weeklyUnitsForRow, 2) }));
+      tr.appendChild(el('td', { 'data-col': 'role', text: pos.role || '—' }));
+      tr.appendChild(el('td', { 'data-col': 'assignee', text: SGExport.assigneeLabel(pos) }));
+      tr.appendChild(el('td', { 'data-col': 'shift', text: pos.shiftDisplay || '—' }));
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'qty', text: fmt(pos.qty, 1) }));
+      pos.dayUnits.forEach(function (u, i) {
+        tr.appendChild(el('td', { class: 'num', 'data-col': 'day' + i, text: u ? fmt(u, 2) : '—' }));
+      });
+      tr.appendChild(el('td', { class: 'num calc', 'data-col': 'perPerson', text: fmt(pos.weeklyUnitsPerPerson, 2) }));
+      tr.appendChild(el('td', { class: 'num calc', 'data-col': 'rowTotal', text: fmt(pos.weeklyUnitsForRow, 2) }));
       pbody.appendChild(tr);
     });
     var pfoot = $('#prod-person-foot');
     pfoot.innerHTML = '';
     var ptr = el('tr');
-    ptr.appendChild(el('td', { colspan: '3', text: 'DEPARTMENT TOTAL' }));
-    ptr.appendChild(el('td', { class: 'num', text: fmt(r.designed.headcount, 1) }));
-    p.byDay.forEach(function (d) { ptr.appendChild(el('td', { class: 'num', text: fmt(d.requiredUnits, 2) })); });
-    ptr.appendChild(el('td', { class: 'num', text: '' }));
-    ptr.appendChild(el('td', { class: 'num', text: fmt(p.requiredWeeklyVolume, 2) }));
+    ptr.appendChild(el('td', { 'data-col': 'role', text: 'DEPARTMENT TOTAL' }));
+    ptr.appendChild(el('td', { 'data-col': 'assignee', text: '' }));
+    ptr.appendChild(el('td', { 'data-col': 'shift', text: '' }));
+    ptr.appendChild(el('td', { class: 'num', 'data-col': 'qty', text: fmt(r.designed.headcount, 1) }));
+    p.byDay.forEach(function (d, i) {
+      ptr.appendChild(el('td', { class: 'num', 'data-col': 'day' + i, text: fmt(d.requiredUnits, 2) }));
+    });
+    ptr.appendChild(el('td', { class: 'num', 'data-col': 'perPerson', text: '' }));
+    ptr.appendChild(el('td', { class: 'num', 'data-col': 'rowTotal', text: fmt(p.requiredWeeklyVolume, 2) }));
     pfoot.appendChild(ptr);
+
+    applyColumnVisibility('prodDay');
+    applyColumnVisibility('prodPerson');
   }
 
   /* ---------- header ---------- */
@@ -914,9 +993,14 @@
     var p = r.productivity;
     html += '<div class="page-break"></div>';
     html += '<h3>Volume required for 100% productivity — by day of week</h3>' +
-      '<p class="pr-sub">Required ' + esc(unit) + ' = scheduled worked hours ÷ budgeted WHpU (' + fmt(p.whpu, 2) + ').</p>' +
+      '<p class="pr-sub">Required ' + esc(unit) + ' = scheduled worked hours ÷ budgeted WHpU (' + fmt(p.whpu, 2) + '). ' +
+      (p.volumeBasis === 'proportional'
+        ? 'Budgeted ' + esc(unit.toLowerCase()) + ' are spread in proportion to the hours scheduled each day.'
+        : 'Budgeted ' + esc(unit.toLowerCase()) + ' are spread evenly across every day.') + '</p>' +
       '<table><thead><tr><th style="text-align:left">Day</th><th>Scheduled worked hours</th><th>8-hour equivalents</th>' +
-      '<th>Required ' + esc(unit) + '</th><th>Budgeted avg ' + esc(unit) + '/day</th><th>Variance</th></tr></thead><tbody>';
+      '<th>Required ' + esc(unit) + '</th><th>' +
+      (p.volumeBasis === 'proportional' ? 'Budgeted ' + esc(unit) + ' that day' : 'Budgeted avg ' + esc(unit) + '/day') +
+      '</th><th>Variance</th></tr></thead><tbody>';
     p.byDay.forEach(function (d) {
       var shortDay = d.varianceUnits > 0.0005;
       html += '<tr><td>' + d.name + '</td><td class="num">' + fmt(d.hours, 1) + '</td>' +
@@ -925,7 +1009,7 @@
         '<td class="num">' + fmt(d.budgetedUnits, 2) + '</td>' +
         '<td class="num' + (shortDay ? ' bad' : '') + '">' + signed(d.varianceUnits, 2) + '</td></tr>';
     });
-    var weekBudget = r.budget.avgDailyVolume * 7;
+    var weekBudget = p.weeklyBudgetedVolume;
     html += '</tbody><tfoot><tr><td>Week total</td><td class="num">' + fmt(r.designed.weeklyHours, 1) + '</td>' +
       '<td class="num">' + fmt(r.designed.weeklyHours / 8, 1) + '</td>' +
       '<td class="num">' + fmt(p.requiredWeeklyVolume, 2) + '</td>' +
@@ -1004,20 +1088,38 @@
       markDirty(true); recompute(); renderGrid();
     });
 
-    var panel = $('#column-panel'), colBtn = $('#btn-columns');
-    function closePanel() { panel.hidden = true; colBtn.setAttribute('aria-expanded', 'false'); }
-    colBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      panel.hidden = !panel.hidden;
-      colBtn.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+    function closeAllPanels() {
+      Object.keys(COLUMN_SETS).forEach(function (id) {
+        var set = COLUMN_SETS[id];
+        $(set.panel).hidden = true;
+        $(set.btn).setAttribute('aria-expanded', 'false');
+      });
+    }
+
+    Object.keys(COLUMN_SETS).forEach(function (id) {
+      var set = COLUMN_SETS[id];
+      var panel = $(set.panel), btn = $(set.btn);
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var wasOpen = !panel.hidden;
+        closeAllPanels();
+        panel.hidden = wasOpen;
+        btn.setAttribute('aria-expanded', wasOpen ? 'false' : 'true');
+      });
+      panel.addEventListener('click', function (e) { e.stopPropagation(); });
+      $(set.all).addEventListener('click', function () {
+        hiddenSet(id).length = 0;
+        markDirty(true);
+        applyColumnVisibility(id);
+        renderColumnPanel(id);
+      });
     });
-    panel.addEventListener('click', function (e) { e.stopPropagation(); });
-    document.addEventListener('click', closePanel);
-    $('#btn-columns-all').addEventListener('click', function () {
-      hiddenSet().length = 0;
+    document.addEventListener('click', closeAllPanels);
+
+    $('#f-volumeBasis').addEventListener('change', function (e) {
+      viewOptions().volumeBasis = e.target.value === 'even' ? 'even' : 'proportional';
       markDirty(true);
-      applyColumnVisibility();
-      renderColumnPanel();
+      recompute();
     });
 
     $('#btn-new').addEventListener('click', newModel);
@@ -1028,7 +1130,7 @@
     $$('[data-close-modal]').forEach(function (b) { b.addEventListener('click', closeLibrary); });
     $('#library-modal').addEventListener('click', function (e) { if (e.target === this) closeLibrary(); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { closeLibrary(); closePanel(); }
+      if (e.key === 'Escape') { closeLibrary(); closeAllPanels(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(false); }
     });
 

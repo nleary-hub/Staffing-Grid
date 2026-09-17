@@ -85,13 +85,29 @@ moment the designed model exceeds the budgeted worked FTE.
 budgeted WHpU:
 
 - *By day of week* — the scheduled worked hours each day ÷ WHpU = the volume
-  that day must deliver to run at 100% productivity, next to the budgeted
-  average per day and the variance.
+  that day must deliver to run at 100% productivity, next to that day's
+  budgeted volume and the variance.
+
+  **Spread budgeted volume** controls how the week's budgeted volume is
+  divided across the days:
+
+  - *Proportional to the hours scheduled each day* (default) — each day gets
+    the share of the week's volume that matches its share of the scheduled
+    hours, so a day staffed twice as heavily is expected to carry twice the
+    volume. Comparing a heavily staffed Monday against a flat daily average
+    otherwise makes every busy day look short and every quiet day generous.
+  - *Evenly across every day* — the flat annual volume ÷ days per year, which
+    is how a budget is usually quoted.
+
+  Either way the seven days add up to the same week, and neither setting
+  changes a required-volume figure, an FTE or an annual total — only how the
+  budgeted side is apportioned.
 - *Per person, per day* — what a single person in each position must cover on
   each day they are scheduled.
 
 Plus the annual volume required versus budgeted, the gap, and the projected
-productivity index (earned hours ÷ designed hours).
+productivity index (earned hours ÷ designed hours). Both productivity tables
+have their own **Columns** picker, saved with the model like the grid's.
 
 ## Saving and loading
 
@@ -167,11 +183,11 @@ exports follow.
 npm test          # or: node --test tests/*.test.js
 ```
 
-42 tests cover the FTE and productivity math, time parsing in every accepted
+48 tests cover the FTE and productivity math, time parsing in every accepted
 format, overnight shifts and unpaid breaks, each PTO basis, the override
 behavior, the over-budget flag, department isolation in storage, backward
 compatibility with models saved before shift times, row reordering, hidden
-columns, and the generated workbook.
+columns, both ways of spreading budgeted volume, and the generated workbook.
 
 ## Files
 
