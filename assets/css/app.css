@@ -210,6 +210,41 @@ table input, table select { padding: 4px 6px; font-size: 13px; border-radius: 5p
 table input[type="number"] { min-width: 58px; }
 .grid-table td.day-cell { padding: 3px 4px; min-width: 62px; }
 .grid-table td.day-cell input { text-align: center; }
+
+/* The grid scrolls sideways once every day carries times, so keep the Role
+   column pinned - otherwise you lose track of which row you are editing. */
+.grid-table th:first-child,
+.grid-table td:first-child { position: sticky; left: 0; z-index: 3; background: #fff; }
+.grid-table thead th:first-child { z-index: 5; background: var(--cm-blue); }
+.grid-table tbody tr:nth-child(even) td:first-child { background: #fafcfe; }
+.grid-table tbody tr:hover td:first-child { background: var(--cm-blue-light); }
+.grid-table tfoot td:first-child { background: var(--cm-blue-light) !important; }
+.grid-table td:first-child::after {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line);
+}
+
+/* per-day start / end time entry */
+.grid-table td.time-cell { min-width: 84px; padding: 3px 4px; }
+.time-pair { display: flex; flex-direction: column; gap: 2px; }
+.time-pair .time-in {
+  text-align: center;
+  padding: 3px 2px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+.time-pair .time-in::placeholder { font-size: 11px; letter-spacing: 0; color: #9aa7b4; }
+.day-hours {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.day-hours.on { color: var(--cm-blue); }
+table input:disabled, table select:disabled { background: #f1f4f7; color: #97a3ae; }
+button.icon:disabled { opacity: .3; }
 .row-actions { white-space: nowrap; display: flex; gap: 4px; }
 .empty-row td { text-align: center; color: var(--ink-soft); font-style: italic; padding: 18px; }
 
@@ -311,6 +346,7 @@ table input[type="number"] { min-width: 58px; }
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   #print-report td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #print-report .tt { font-size: 7.5px; color: var(--ink-soft); font-variant-numeric: tabular-nums; letter-spacing: .02em; }
   #print-report .kv { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px 10px; }
   #print-report .kv div { border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
   #print-report .kv .k { font-size: 8.5px; text-transform: uppercase; color: var(--ink-soft); letter-spacing: .03em; }

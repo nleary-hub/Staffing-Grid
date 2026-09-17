@@ -40,10 +40,31 @@ which is shown in the derived stats so nothing is hidden.
 
 **3 · Staffing grid** — one row per position. Each row is role-based (e.g.
 "RN – Night") with a separate *Assigned to* field that can hold a job title, a
-specific person's name, or be marked Open/TBD. Enter the worked (productive)
-shift hours for each day of the week and a Qty for how many people fill that
-position. Rows can be duplicated or removed. The grid calculates hours per
-week, annual worked hours, wFTE and pFTE per row and in total.
+specific person's name, or be marked Open/TBD, plus a Qty for how many people
+fill that position.
+
+Each day of the week has its own **start and end time**, and the worked hours
+for that day are calculated from them — so a position can work different hours
+on different days. Times can be typed however you write them: `0700`, `700`,
+`7`, `7:00`, `7a`, `7 AM`, `19:30`, `1930`, `7:30p`. They tidy up to 24-hour
+form when you leave the box.
+
+- An end time at or before the start is read as an **overnight shift**, so
+  `1900`–`0730` is 12.5 hours.
+- **Unpaid break (min)** is deducted from every day that has a shift, so
+  `0700`–`1930` with a 30-minute break is 12.0 worked hours, not 12.5. Leave it
+  at 0 if your shifts are paid straight through.
+- A blank day is a day off.
+- The `⇉` row button copies the first day's times across all seven days.
+- *Hours from* can be switched from **Times** to **Hours** on any row to type
+  hours in directly — useful for a position with no fixed clock schedule.
+  Models saved before shift times existed open in Hours mode with their
+  numbers untouched.
+- The *Shift label* column is optional; left blank, reports fall back to the
+  row's most common time range (e.g. `0700-1930`).
+
+Rows can be duplicated or removed. The grid calculates hours per week, annual
+worked hours, wFTE and pFTE per row and in total.
 
 **4 · Designed model vs budget** — designed wFTE/pFTE against budget, with the
 variance, % of budget, and a banner at the top of the page that turns red the
@@ -83,15 +104,17 @@ record: a collision is stored as a new copy.
 
 ## Exports
 
-- **Export Excel** — a real `.xlsx` with four sheets: *Summary*, *Staffing
-  Grid*, *Productivity by Day*, *Productivity by Person*. Styled headers,
-  frozen panes, column widths and number formats; over-budget figures are
+- **Export Excel** — a real `.xlsx` with five sheets: *Summary*, *Staffing
+  Grid*, *Shift Schedule* (each day's start and end time behind the hours),
+  *Productivity by Day*, *Productivity by Person*. Styled headers, frozen
+  panes, column widths and number formats; over-budget figures are
   highlighted. Written by `assets/js/xlsx.js`, a small Office Open XML writer
   included here — no SheetJS, no CDN.
 - **Export PDF** — opens the browser print dialog against a dedicated print
   layout (choose *Save as PDF* / *Microsoft Print to PDF*). Landscape letter,
-  CaroMont header, the over/under-budget flag, the full grid and both
-  productivity breakdowns, with the version date in the header and footer.
+  CaroMont header, the over/under-budget flag, the full grid with each day's
+  time range printed under its hours, both productivity breakdowns, and a note
+  of any unpaid breaks — with the version date in the header and footer.
 
 Both filenames carry the department and version date, e.g.
 `Staffing-Grid_4-West-Med-Surg_2026-02-01_v3.xlsx`.
@@ -99,6 +122,9 @@ Both filenames carry the department and version date, e.g.
 ## Calculations
 
 ```
+day hours             = (end time − start time) − unpaid break
+                        (end ≤ start rolls to the next day)
+
 budgeted worked hours = annual volume × WHpU
 budgeted wFTE         = budgeted worked hours ÷ FTE hours per year
 budgeted pFTE         = budgeted wFTE × benefit gross-up factor
@@ -130,9 +156,11 @@ exports follow.
 npm test          # or: node --test tests/*.test.js
 ```
 
-21 tests cover the FTE and productivity math, each PTO basis, the override
-behavior, the over-budget flag, department isolation in storage, and the
-generated workbook.
+35 tests cover the FTE and productivity math, time parsing in every accepted
+format, overnight shifts and unpaid breaks, each PTO basis, the override
+behavior, the over-budget flag, department isolation in storage, backward
+compatibility with models saved before shift times, and the generated
+workbook.
 
 ## Files
 

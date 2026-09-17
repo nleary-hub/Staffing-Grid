@@ -129,7 +129,7 @@
 
     if (!state.model.positions.length) {
       body.appendChild(el('tr', { class: 'empty-row' }, [
-        el('td', { colspan: '18', text: 'No positions yet — choose "+ Add position" to start building the grid.' })
+        el('td', { colspan: '20', text: 'No positions yet — choose "+ Add position" to start building the grid.' })
       ]));
     }
 
@@ -158,7 +158,8 @@
       tr.appendChild(el('td', {}, [sel]));
 
       tr.appendChild(el('td', {}, [el('input', {
-        value: pos.shift || '', placeholder: 'e.g. 0700-1930',
+        value: pos.shift || '', placeholder: 'e.g. Days, Nights',
+        title: 'Optional label. Left blank, reports use the shift times.',
         oninput: function (e) { pos.shift = e.target.value; touchRow(); }
       })]));
 
@@ -167,12 +168,57 @@
         oninput: function (e) { pos.qty = e.target.value; touchRow(); }
       })]));
 
+      var usesTimes = pos.entryMode !== 'hours';
+
+      var modeSel = el('select', {
+        title: 'Calculate hours from start/end times, or type hours directly',
+        onchange: function (e) {
+          pos.entryMode = e.target.value;
+          markDirty(true); recompute(); renderGrid();
+        }
+      }, [
+        el('option', { value: 'times', text: 'Times' }),
+        el('option', { value: 'hours', text: 'Hours' })
+      ]);
+      modeSel.value = usesTimes ? 'times' : 'hours';
+      tr.appendChild(el('td', {}, [modeSel]));
+
+      tr.appendChild(el('td', { class: 'num' }, [el('input', {
+        type: 'number', step: '5', min: '0', value: pos.breakMinutes,
+        disabled: usesTimes ? null : 'disabled',
+        title: usesTimes ? 'Unpaid break deducted from each day that has a shift'
+                         : 'Only applies when hours come from start/end times',
+        'aria-label': 'Unpaid break minutes',
+        oninput: function (e) { pos.breakMinutes = e.target.value; touchRow(); }
+      })]));
+
       DAYS.forEach(function (d, i) {
-        tr.appendChild(el('td', { class: 'day-cell' }, [el('input', {
-          type: 'number', step: 'any', min: '0', value: pos.hours[i] || 0,
-          'aria-label': d + ' hours',
-          oninput: function (e) { pos.hours[i] = e.target.value; touchRow(); }
-        })]));
+        if (!usesTimes) {
+          tr.appendChild(el('td', { class: 'day-cell' }, [el('input', {
+            type: 'number', step: 'any', min: '0', value: pos.hours[i] || 0,
+            'aria-label': d + ' hours',
+            oninput: function (e) { pos.hours[i] = e.target.value; touchRow(); }
+          })]));
+          return;
+        }
+
+        var t = pos.times[i] || { start: '', end: '' };
+        var startInput = el('input', {
+          class: 'time-in', value: t.start, placeholder: 'start',
+          'aria-label': d + ' start time',
+          oninput: function (e) { pos.times[i].start = e.target.value; touchRow(); },
+          onblur: function (e) { normalizeTimeInput(e.target, pos, i, 'start'); }
+        });
+        var endInput = el('input', {
+          class: 'time-in', value: t.end, placeholder: 'end',
+          'aria-label': d + ' end time',
+          oninput: function (e) { pos.times[i].end = e.target.value; touchRow(); },
+          onblur: function (e) { normalizeTimeInput(e.target, pos, i, 'end'); }
+        });
+        tr.appendChild(el('td', { class: 'day-cell time-cell' }, [
+          el('div', { class: 'time-pair' }, [startInput, endInput]),
+          el('div', { class: 'day-hours' })
+        ]));
       });
 
       tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.weeklyHoursPerPerson, 1) }));
@@ -182,6 +228,20 @@
       tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.pFTE, 2) }));
 
       tr.appendChild(el('td', {}, [el('div', { class: 'row-actions' }, [
+        el('button', {
+          type: 'button', class: 'icon', title: "Copy the first day's times to all seven days", text: '⇉',
+          disabled: pos.entryMode === 'hours' ? 'disabled' : null,
+          onclick: function () {
+            var src = null;
+            for (var i = 0; i < 7; i++) {
+              var t = pos.times[i];
+              if (t && SGCalc.parseTime(t.start) !== null && SGCalc.parseTime(t.end) !== null) { src = t; break; }
+            }
+            if (!src) { toast('Enter a start and end time on one day first.', true); return; }
+            for (var j = 0; j < 7; j++) pos.times[j] = { start: src.start, end: src.end };
+            markDirty(true); recompute(); renderGrid();
+          }
+        }),
         el('button', {
           type: 'button', class: 'icon', title: 'Duplicate position', text: '⧉',
           onclick: function () {
@@ -203,7 +263,22 @@
       body.appendChild(tr);
     });
 
-    renderGridFoot();
+    refreshGridCalcCells();
+  }
+
+  // Tidy "700" into "07:00" when the manager leaves the box, so the grid reads
+  // the same however each person types. Text that is not a time is left alone
+  // and simply scores zero hours, which the day readout makes obvious.
+  function normalizeTimeInput(input, pos, dayIndex, which) {
+    var mins = SGCalc.parseTime(pos.times[dayIndex][which]);
+    if (mins === null) return;
+    var pretty = SGCalc.formatTime(mins);
+    if (pretty === pos.times[dayIndex][which]) return;
+    pos.times[dayIndex][which] = pretty;
+    input.value = pretty;
+    markDirty(true);
+    recompute();
+    refreshGridCalcCells();
   }
 
   // Recompute on cell edit without rebuilding inputs (keeps focus & caret).
@@ -218,6 +293,12 @@
     rows.forEach(function (tr, i) {
       var c = state.computed && state.computed.positions[i];
       if (!c) return;
+      var dayCells = tr.querySelectorAll('td.time-cell .day-hours');
+      for (var d = 0; d < dayCells.length; d++) {
+        var h = c.hours[d];
+        dayCells[d].textContent = h ? fmt(h, 2).replace(/\.?0+$/, '') + ' h' : '—';
+        dayCells[d].className = 'day-hours' + (h ? ' on' : '');
+      }
       var cells = tr.querySelectorAll('td.calc');
       if (cells.length < 5) return;
       cells[0].textContent = fmt(c.weeklyHoursPerPerson, 1);
@@ -237,6 +318,7 @@
     var tr = el('tr');
     tr.appendChild(el('td', { colspan: '4', text: 'TOTAL — ' + r.designed.positionCount + ' position row(s)' }));
     tr.appendChild(el('td', { class: 'num', text: fmt(r.designed.headcount, 1) }));
+    tr.appendChild(el('td', { colspan: '2', text: '' }));
     r.designed.dailyHours.forEach(function (h) { tr.appendChild(el('td', { class: 'num', text: fmt(h, 1) })); });
     tr.appendChild(el('td', { class: 'num', text: '' }));
     tr.appendChild(el('td', { class: 'num', text: fmt(r.designed.weeklyHours, 1) }));
@@ -388,7 +470,7 @@
       var tr = el('tr');
       tr.appendChild(el('td', { text: pos.role || '—' }));
       tr.appendChild(el('td', { text: SGExport.assigneeLabel(pos) }));
-      tr.appendChild(el('td', { text: pos.shift || '—' }));
+      tr.appendChild(el('td', { text: pos.shiftDisplay || '—' }));
       tr.appendChild(el('td', { class: 'num', text: fmt(pos.qty, 1) }));
       pos.dayUnits.forEach(function (u) { tr.appendChild(el('td', { class: 'num', text: u ? fmt(u, 2) : '—' })); });
       tr.appendChild(el('td', { class: 'num calc', text: fmt(pos.weeklyUnitsPerPerson, 2) }));
@@ -651,8 +733,13 @@
       '<th>Hrs/wk pp</th><th>Total hrs/wk</th><th>Annual hrs</th><th>wFTE</th><th>pFTE</th></tr></thead><tbody>';
     r.positions.forEach(function (p) {
       html += '<tr><td>' + esc(p.role || '—') + '</td><td>' + esc(SGExport.assigneeLabel(p)) + '</td>' +
-        '<td>' + esc(p.shift || '—') + '</td><td class="num">' + fmt(p.qty, 1) + '</td>' +
-        p.hours.map(function (h) { return '<td class="num">' + (h ? fmt(h, 1) : '—') + '</td>'; }).join('') +
+        '<td>' + esc(p.shiftDisplay || '—') + '</td><td class="num">' + fmt(p.qty, 1) + '</td>' +
+        p.hours.map(function (h, di) {
+          if (!h) return '<td class="num">—</td>';
+          var label = p.dayLabels && p.dayLabels[di];
+          return '<td class="num">' + fmt(h, 1) +
+            (label ? '<div class="tt">' + esc(label) + '</div>' : '') + '</td>';
+        }).join('') +
         '<td class="num">' + fmt(p.weeklyHoursPerPerson, 1) + '</td>' +
         '<td class="num">' + fmt(p.weeklyHours, 1) + '</td>' +
         '<td class="num">' + fmt(p.annualWorkedHours, 0) + '</td>' +
@@ -703,7 +790,7 @@
       '<th>Per person / wk</th><th>Row total / wk</th></tr></thead><tbody>';
     p.byPosition.forEach(function (pos) {
       html += '<tr><td>' + esc(pos.role || '—') + '</td><td>' + esc(SGExport.assigneeLabel(pos)) + '</td>' +
-        '<td>' + esc(pos.shift || '—') + '</td><td class="num">' + fmt(pos.qty, 1) + '</td>' +
+        '<td>' + esc(pos.shiftDisplay || '—') + '</td><td class="num">' + fmt(pos.qty, 1) + '</td>' +
         pos.dayUnits.map(function (u) { return '<td class="num">' + (u ? fmt(u, 2) : '—') + '</td>'; }).join('') +
         '<td class="num">' + fmt(pos.weeklyUnitsPerPerson, 2) + '</td>' +
         '<td class="num">' + fmt(pos.weeklyUnitsForRow, 2) + '</td></tr>';
@@ -712,6 +799,15 @@
     html += '</tbody><tfoot><tr><td colspan="3">DEPARTMENT TOTAL</td><td class="num">' + fmt(r.designed.headcount, 1) + '</td>' +
       p.byDay.map(function (d) { return '<td class="num">' + fmt(d.requiredUnits, 2) + '</td>'; }).join('') +
       '<td class="num"></td><td class="num">' + fmt(p.requiredWeeklyVolume, 2) + '</td></tr></tfoot></table>';
+
+    var breaks = r.positions.filter(function (q) { return q.entryMode === 'times' && q.breakMinutes > 0; });
+    if (breaks.length) {
+      html += '<p class="pr-sub" style="margin-top:6px">Worked hours are net of the unpaid break on ' +
+        breaks.length + ' position row(s): ' +
+        esc(breaks.map(function (q) {
+          return (q.role || 'row') + ' −' + fmt(q.breakMinutes, 0) + ' min/day';
+        }).join(' · ')) + '.</p>';
+    }
 
     if (m.notes) html += '<h3>Notes &amp; assumptions</h3><div class="pr-notes">' + esc(m.notes) + '</div>';
 

@@ -117,7 +117,8 @@
     /* Sheet 2: Staffing grid */
     var gridHeader = [
       { v: 'Role', s: 'header' }, { v: 'Job title / person', s: 'header' },
-      { v: 'Shift', s: 'header' }, { v: 'Qty', s: 'header' }
+      { v: 'Shift', s: 'header' }, { v: 'Qty', s: 'header' },
+      { v: 'Unpaid break (min)', s: 'header' }
     ].concat(DAYS.map(function (d) { return { v: d + ' hrs', s: 'header' }; }))
       .concat([
         { v: 'Hrs/week per person', s: 'header' },
@@ -131,8 +132,9 @@
       grid.push([
         { v: p.role || '—', s: 'text' },
         { v: assigneeLabel(p), s: 'text' },
-        { v: p.shift || '—', s: 'text' },
-        { v: p.qty, s: 'dec1' }
+        { v: p.shiftDisplay || '—', s: 'text' },
+        { v: p.qty, s: 'dec1' },
+        { v: p.entryMode === 'times' ? p.breakMinutes : '', s: 'dec1' }
       ].concat(p.hours.map(function (h) { return { v: h, s: 'dec1' }; }))
         .concat([
           { v: p.weeklyHoursPerPerson, s: 'dec1' },
@@ -144,7 +146,7 @@
     });
     grid.push([
       { v: 'TOTAL', s: 'totalText' }, { v: '', s: 'totalText' }, { v: '', s: 'totalText' },
-      { v: r.designed.headcount, s: 'totalNum1' }
+      { v: r.designed.headcount, s: 'totalNum1' }, { v: '', s: 'totalText' }
     ].concat(r.designed.dailyHours.map(function (h) { return { v: h, s: 'totalNum1' }; }))
       .concat([
         { v: '', s: 'totalText' },
@@ -215,7 +217,7 @@
       byPos.push([
         { v: p.role || '—', s: 'text' },
         { v: assigneeLabel(p), s: 'text' },
-        { v: p.shift || '—', s: 'text' },
+        { v: p.shiftDisplay || '—', s: 'text' },
         { v: p.qty, s: 'dec1' }
       ].concat(p.dayUnits.map(function (u) { return { v: u, s: 'dec2' }; }))
         .concat([{ v: p.weeklyUnitsPerPerson, s: 'dec2' }, { v: p.weeklyUnitsForRow, s: 'dec2' }]));
@@ -226,12 +228,39 @@
     ].concat(r.productivity.byDay.map(function (d) { return { v: d.requiredUnits, s: 'totalNum2' }; }))
       .concat([{ v: '', s: 'totalText' }, { v: r.productivity.requiredWeeklyVolume, s: 'totalNum2' }]));
 
+    /* Sheet 5: shift times behind the hours */
+    var sched = [
+      [{ v: 'Shift schedule — start and end time by day', s: 'title' }],
+      [{ v: 'Hours are the clock span less the unpaid break. An end time at or before the start is an overnight shift.', s: 'subtitle' }],
+      blank,
+      [
+        { v: 'Role', s: 'header' }, { v: 'Job title / person', s: 'header' },
+        { v: 'Qty', s: 'header' }, { v: 'Unpaid break (min)', s: 'header' }
+      ].concat(DAYS.map(function (d) { return { v: d, s: 'header' }; }))
+        .concat([{ v: 'Hrs/week per person', s: 'header' }])
+    ];
+    r.positions.forEach(function (p) {
+      sched.push([
+        { v: p.role || '—', s: 'text' },
+        { v: assigneeLabel(p), s: 'text' },
+        { v: p.qty, s: 'dec1' },
+        { v: p.entryMode === 'times' ? p.breakMinutes : '', s: 'dec1' }
+      ].concat(DAYS.map(function (d, i) {
+        if (p.entryMode !== 'times') {
+          return { v: p.hours[i] ? p.hours[i] + ' hrs' : 'Off', s: 'text' };
+        }
+        return { v: p.dayLabels[i] || 'Off', s: 'text' };
+      })).concat([{ v: p.weeklyHoursPerPerson, s: 'dec1' }]));
+    });
+    if (!r.positions.length) sched.push([{ v: 'No positions entered.', s: 'text' }]);
+
     return {
       title: 'Staffing Grid — ' + (model.departmentName || 'Department'),
       creator: 'CaroMont Staffing Grid Builder',
       sheets: [
         { name: 'Summary', orientation: 'portrait', cols: [{ width: 42 }, { width: 18 }, { width: 16 }, { width: 16 }, { width: 14 }], rows: summary },
-        { name: 'Staffing Grid', freeze: 1, cols: [{ width: 24 }, { width: 26 }, { width: 16 }, { width: 7 }].concat(DAYS.map(function () { return { width: 8 }; }), [{ width: 12 }, { width: 12 }, { width: 14 }, { width: 10 }, { width: 10 }]), rows: grid },
+        { name: 'Staffing Grid', freeze: 1, cols: [{ width: 24 }, { width: 26 }, { width: 16 }, { width: 7 }, { width: 11 }].concat(DAYS.map(function () { return { width: 8 }; }), [{ width: 12 }, { width: 12 }, { width: 14 }, { width: 10 }, { width: 10 }]), rows: grid },
+        { name: 'Shift Schedule', freeze: 4, cols: [{ width: 24 }, { width: 26 }, { width: 7 }, { width: 11 }].concat(DAYS.map(function () { return { width: 13 }; }), [{ width: 16 }]), rows: sched },
         { name: 'Productivity by Day', cols: [{ width: 16 }, { width: 18 }, { width: 16 }, { width: 20 }, { width: 20 }, { width: 22 }], rows: byDay },
         { name: 'Productivity by Person', freeze: 4, cols: [{ width: 24 }, { width: 26 }, { width: 16 }, { width: 7 }].concat(DAYS.map(function () { return { width: 9 }; }), [{ width: 16 }, { width: 16 }]), rows: byPos }
       ]

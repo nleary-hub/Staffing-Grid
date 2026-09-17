@@ -158,7 +158,7 @@
   <!-- ============ Staffing grid ============ -->
   <section class="card">
     <h2>3 &nbsp;&middot;&nbsp; Staffing grid
-      <span class="h2-note">Enter the worked (productive) hours scheduled each day. Qty = number of people in that position.</span>
+      <span class="h2-note">Enter each day&rsquo;s start and end time &mdash; hours calculate automatically. Qty = number of people in that position.</span>
     </h2>
     <div class="card-body">
       <div class="group" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
@@ -170,11 +170,13 @@
         <table class="grid-table" id="grid-table">
           <thead>
             <tr>
-              <th style="min-width:150px">Role</th>
-              <th style="min-width:160px">Assigned to</th>
-              <th style="min-width:90px">Type</th>
-              <th style="min-width:110px">Shift</th>
-              <th style="min-width:60px">Qty</th>
+              <th style="min-width:140px">Role</th>
+              <th style="min-width:150px">Assigned to</th>
+              <th style="min-width:88px">Type</th>
+              <th style="min-width:100px">Shift label</th>
+              <th style="min-width:56px">Qty</th>
+              <th style="min-width:86px">Hours from</th>
+              <th style="min-width:66px">Unpaid<br>break (min)</th>
               <th class="day">Sun</th><th class="day">Mon</th><th class="day">Tue</th>
               <th class="day">Wed</th><th class="day">Thu</th><th class="day">Fri</th><th class="day">Sat</th>
               <th class="num">Hrs/wk<br>per person</th>
@@ -190,6 +192,11 @@
         </table>
       </div>
       <div class="legend">
+        Times accept <code>0700</code>, <code>7:00</code>, <code>7a</code> or <code>7:30 PM</code>. An end time at or before the start is
+        read as an overnight shift, so <code>1900</code>&ndash;<code>0730</code> is 12.5 hours. The unpaid break is deducted from every
+        day that has a shift, so <code>0700</code>&ndash;<code>1930</code> with a 30-minute break is 12.0 worked hours. Leave a day blank
+        for a day off, or switch <em>Hours from</em> to <strong>Hours</strong> to type hours straight in.
+        <br>
         <code>wFTE</code> = total scheduled worked hours per week &divide; (FTE hours &divide; weeks per year) &nbsp;&middot;&nbsp;
         <code>pFTE</code> = wFTE &times; benefit gross-up factor, so PTO coverage is included.
       </div>

@@ -43,8 +43,123 @@
     return [0, 0, 0, 0, 0, 0, 0];
   }
 
+  function emptyTimes() {
+    var out = [];
+    for (var i = 0; i < 7; i++) out.push({ start: '', end: '' });
+    return out;
+  }
+
+  /**
+   * Parse a clock time the way a manager would type it.
+   * Accepts 0700, 700, 7, 7:00, 07:00, 19:30, 1930, 7a, 7am, 7:30p, 7:30 PM.
+   * Returns minutes past midnight, or null when the text is not a time.
+   * 24:00 / 2400 is accepted as end-of-day (1440) so a shift can end at midnight.
+   */
+  function parseTime(input) {
+    if (input === null || input === undefined) return null;
+    var s = String(input).trim().toLowerCase().replace(/\./g, '');
+    if (!s) return null;
+
+    var mer = null;
+    var m = /(am|pm|a|p)$/.exec(s);
+    if (m) { mer = m[1].charAt(0); s = s.slice(0, m.index); }
+    s = s.replace(/\s+/g, '');
+    if (!s) return null;
+
+    var h, min;
+    if (s.indexOf(':') >= 0) {
+      var parts = s.split(':');
+      if (parts.length !== 2 || !/^\d{1,2}$/.test(parts[0]) || !/^\d{1,2}$/.test(parts[1])) return null;
+      h = parseInt(parts[0], 10);
+      min = parseInt(parts[1], 10);
+    } else {
+      if (!/^\d{1,4}$/.test(s)) return null;
+      if (s.length <= 2) { h = parseInt(s, 10); min = 0; }
+      else { h = parseInt(s.slice(0, s.length - 2), 10); min = parseInt(s.slice(-2), 10); }
+    }
+    if (!isFinite(h) || !isFinite(min) || min > 59 || h < 0) return null;
+
+    if (mer) {
+      if (h < 1 || h > 12) return null;
+      if (mer === 'a') h = (h === 12 ? 0 : h);
+      else h = (h === 12 ? 12 : h + 12);
+    }
+    if (h === 24 && min === 0) return 1440;   // midnight at the end of the day
+    if (h > 23) return null;
+    return h * 60 + min;
+  }
+
+  /** Minutes past midnight -> "19:30" (24-hour), for normalising what was typed. */
+  function formatTime(minutes) {
+    if (minutes === null || minutes === undefined || !isFinite(minutes)) return '';
+    var h = Math.floor(minutes / 60), m = Math.round(minutes % 60);
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+
+  /** Minutes past midnight -> "1930", the compact form used on reports. */
+  function compactTime(minutes) {
+    return formatTime(minutes).replace(':', '');
+  }
+
+  /**
+   * Worked hours for one day from its start and end time, minus the unpaid
+   * break. An end at or before the start is read as an overnight shift, so
+   * 1900-0730 is 12.5 clock hours.
+   */
+  function shiftHours(start, end, breakMinutes) {
+    var s = parseTime(start), e = parseTime(end);
+    if (s === null || e === null || s >= 1440) return 0;
+    var span = e - s;
+    if (span < 0) span += 1440;
+    if (span === 0) return 0;
+    span -= n0(breakMinutes);
+    return span > 0 ? span / 60 : 0;
+  }
+
+  /** "0700-1930" for a day, or '' when that day has no usable pair of times. */
+  function shiftLabel(start, end) {
+    var s = parseTime(start), e = parseTime(end);
+    if (s === null || e === null) return '';
+    return compactTime(s) + '-' + compactTime(e);
+  }
+
+  function normalizeTimes(times) {
+    var out = emptyTimes();
+    if (!times) return out;
+    for (var i = 0; i < 7; i++) {
+      var t = times[i];
+      if (!t) continue;
+      out[i] = { start: t.start === null || t.start === undefined ? '' : String(t.start),
+                 end: t.end === null || t.end === undefined ? '' : String(t.end) };
+    }
+    return out;
+  }
+
+  /**
+   * Which side of a position row drives its hours.
+   *
+   * Models saved before start/end times existed carry hours only, so they are
+   * read back in hours mode and nothing a manager entered is reinterpreted.
+   * This has to be shared: raw stored models reach computeModel without ever
+   * passing through newPosition (the saved-model list computes them directly).
+   */
+  function inferEntryMode(position) {
+    if (!position) return 'times';
+    if (position.entryMode === 'times' || position.entryMode === 'hours') return position.entryMode;
+    var times = normalizeTimes(position.times);
+    if (times.some(function (t) { return t.start || t.end; })) return 'times';
+    var hours = position.hours || [];
+    for (var i = 0; i < hours.length; i++) if (n0(hours[i]) > 0) return 'hours';
+    return 'times';
+  }
+
   function newPosition(seed) {
     seed = seed || {};
+    var hours = (seed.hours && seed.hours.slice(0, 7)) || emptyHours();
+    while (hours.length < 7) hours.push(0);
+    var times = normalizeTimes(seed.times);
+    var mode = inferEntryMode(seed);
+
     return {
       id: seed.id || 'pos_' + Math.random().toString(36).slice(2, 10),
       role: seed.role || '',
@@ -52,7 +167,10 @@
       assigneeType: seed.assigneeType || 'title', // 'title' | 'person' | 'open'
       shift: seed.shift || '',
       qty: seed.qty === undefined ? 1 : seed.qty,
-      hours: (seed.hours && seed.hours.slice(0, 7)) || emptyHours()
+      entryMode: mode,                            // 'times' | 'hours'
+      breakMinutes: seed.breakMinutes === undefined ? 0 : seed.breakMinutes,
+      times: times,
+      hours: hours
     };
   }
 
@@ -61,7 +179,7 @@
     var today = new Date();
     var iso = today.toISOString().slice(0, 10);
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       id: seed.id || 'mdl_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8),
       departmentName: seed.departmentName || '',
       departmentCode: seed.departmentCode || '',
@@ -148,7 +266,28 @@
     var dailyHours = emptyHours();
     var positions = ((model && model.positions) || []).map(function (p) {
       var qty = n0(p.qty) || 0;
-      var hours = (p.hours || emptyHours()).map(n0);
+      var mode = inferEntryMode(p);
+      var breakMinutes = n0(p.breakMinutes);
+      var times = normalizeTimes(p.times);
+      var rawHours = (p.hours || emptyHours());
+      var hours = [], dayLabels = [];
+      for (var di = 0; di < 7; di++) {
+        if (mode === 'times') {
+          hours.push(shiftHours(times[di].start, times[di].end, breakMinutes));
+          dayLabels.push(shiftLabel(times[di].start, times[di].end));
+        } else {
+          hours.push(n0(rawHours[di]));
+          dayLabels.push('');
+        }
+      }
+      // With no shift label typed, fall back to the most common time range so
+      // exports still say which shift the row is.
+      var derivedShift = '';
+      var counts = {};
+      dayLabels.forEach(function (l) { if (l) counts[l] = (counts[l] || 0) + 1; });
+      Object.keys(counts).forEach(function (l) {
+        if (!derivedShift || counts[l] > counts[derivedShift]) derivedShift = l;
+      });
       var weeklyPerPerson = hours.reduce(function (a, h) { return a + h; }, 0);
       var weeklyHours = weeklyPerPerson * qty;
       for (var d = 0; d < 7; d++) dailyHours[d] += hours[d] * qty;
@@ -160,6 +299,12 @@
         assignee: p.assignee || '',
         assigneeType: p.assigneeType || 'title',
         shift: p.shift || '',
+        entryMode: mode,
+        breakMinutes: breakMinutes,
+        times: times,
+        dayLabels: dayLabels,
+        derivedShift: derivedShift,
+        shiftDisplay: p.shift || derivedShift || '',
         qty: qty,
         hours: hours,
         weeklyHoursPerPerson: weeklyPerPerson,
@@ -211,7 +356,10 @@
         id: p.id,
         role: p.role,
         assignee: p.assignee,
+        assigneeType: p.assigneeType,
         shift: p.shift,
+        shiftDisplay: p.shiftDisplay,
+        dayLabels: p.dayLabels,
         qty: p.qty,
         hours: p.hours,
         dayUnits: dayUnits,
@@ -287,6 +435,13 @@
     PTO_BASIS: PTO_BASIS,
     num: num,
     emptyHours: emptyHours,
+    emptyTimes: emptyTimes,
+    inferEntryMode: inferEntryMode,
+    parseTime: parseTime,
+    formatTime: formatTime,
+    compactTime: compactTime,
+    shiftHours: shiftHours,
+    shiftLabel: shiftLabel,
     newPosition: newPosition,
     newModel: newModel,
     ptoFactor: ptoFactor,

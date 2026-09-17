@@ -208,12 +208,12 @@ test('models saved for different departments do not overwrite each other', () =>
   delete global.window;
 });
 
-test('workbook builds four sheets with the expected headline numbers', () => {
+test('workbook builds every sheet with the expected headline numbers', () => {
   const m = model({}, [{ role: 'RN', qty: 6, hours: [12, 12, 12, 0, 0, 0, 0] }]);
   const r = SGCalc.computeModel(m);
   const wb = SGExport.buildWorkbook(m, r);
   assert.deepStrictEqual(wb.sheets.map(s => s.name),
-    ['Summary', 'Staffing Grid', 'Productivity by Day', 'Productivity by Person']);
+    ['Summary', 'Staffing Grid', 'Shift Schedule', 'Productivity by Day', 'Productivity by Person']);
 
   const bytes = SGXlsx.build(wb);
   // Local file header magic - a real ZIP/OOXML container.
@@ -235,4 +235,168 @@ test('xlsx escapes XML-unsafe text in department names', () => {
 test('export filenames are filesystem-safe and carry the version date', () => {
   const m = SGCalc.newModel({ departmentName: '4 West / Med-Surg', versionDate: '2026-02-01', versionLabel: 'v3' });
   assert.strictEqual(SGExport.fileBase(m), 'Staffing-Grid_4-West-Med-Surg_2026-02-01_v3');
+});
+
+/* ---------------- start / end shift times ---------------- */
+
+function timed(times, extra = {}) {
+  return Object.assign({ entryMode: 'times', qty: 1, times }, extra);
+}
+const T = (start, end) => ({ start, end });
+const OFF = { start: '', end: '' };
+
+test('a time is understood however the manager types it', () => {
+  const cases = {
+    '0700': 420, '700': 420, '7': 420, '7:00': 420, '07:00': 420,
+    '7a': 420, '7am': 420, '7 AM': 420, '7:00 a.m.': 420,
+    '1930': 1170, '19:30': 1170, '7:30p': 1170, '7:30 PM': 1170,
+    '12a': 0, '12am': 0, '0000': 0, '12p': 720, '2400': 1440, '24:00': 1440
+  };
+  for (const [text, mins] of Object.entries(cases)) {
+    assert.strictEqual(SGCalc.parseTime(text), mins, `parseTime(${JSON.stringify(text)})`);
+  }
+  for (const bad of ['', '   ', 'x', 'lunch', '25:00', '7:75', '13a', '99999', null, undefined]) {
+    assert.strictEqual(SGCalc.parseTime(bad), null, `parseTime(${JSON.stringify(bad)}) should be null`);
+  }
+});
+
+test('times normalise back to a 24-hour display', () => {
+  assert.strictEqual(SGCalc.formatTime(SGCalc.parseTime('7a')), '07:00');
+  assert.strictEqual(SGCalc.formatTime(SGCalc.parseTime('730p')), '19:30');
+  assert.strictEqual(SGCalc.formatTime(1440), '24:00');
+  assert.strictEqual(SGCalc.compactTime(SGCalc.parseTime('7:30 PM')), '1930');
+  assert.strictEqual(SGCalc.shiftLabel('7a', '7:30p'), '0700-1930');
+  assert.strictEqual(SGCalc.shiftLabel('7a', ''), '');
+});
+
+test('hours come from the clock span between start and end', () => {
+  close(SGCalc.shiftHours('0700', '1930', 0), 12.5);
+  close(SGCalc.shiftHours('0800', '1630', 0), 8.5);
+  close(SGCalc.shiftHours('7a', '3:30p', 0), 8.5);
+});
+
+test('the unpaid break is deducted from the clock span', () => {
+  close(SGCalc.shiftHours('0700', '1930', 30), 12);
+  close(SGCalc.shiftHours('0800', '1630', 30), 8);
+  close(SGCalc.shiftHours('0800', '1200', 0), 4);
+  close(SGCalc.shiftHours('0800', '0815', 30), 0);   // break longer than the shift never goes negative
+});
+
+test('an end at or before the start is an overnight shift', () => {
+  close(SGCalc.shiftHours('1900', '0730', 0), 12.5);
+  close(SGCalc.shiftHours('1900', '0730', 30), 12);
+  close(SGCalc.shiftHours('2300', '0700', 0), 8);
+  close(SGCalc.shiftHours('0700', '0700', 0), 0);    // identical times are not a 24-hour shift
+  close(SGCalc.shiftHours('0000', '2400', 0), 24);   // a full day is written 00:00-24:00
+});
+
+test('a missing or unreadable time scores zero hours', () => {
+  close(SGCalc.shiftHours('0700', '', 0), 0);
+  close(SGCalc.shiftHours('', '1930', 0), 0);
+  close(SGCalc.shiftHours('lunch', '1930', 0), 0);
+});
+
+test('each day of the week can carry its own start and end time', () => {
+  const r = SGCalc.computeModel(model({}, [timed([
+    OFF,                    // Sun off
+    T('0700', '1530'),      // Mon  8.0
+    T('0700', '1930'),      // Tue 12.5
+    T('1900', '0730'),      // Wed 12.5 overnight
+    T('0900', '1300'),      // Thu  4.0
+    T('0700', '1530'),      // Fri  8.0
+    OFF                     // Sat off
+  ])]));
+  const p = r.positions[0];
+  assert.deepStrictEqual(p.hours.map(h => Math.round(h * 100) / 100), [0, 8.5, 12.5, 12.5, 4, 8.5, 0]);
+  close(p.weeklyHoursPerPerson, 46);
+  assert.deepStrictEqual(p.dayLabels, ['', '0700-1530', '0700-1930', '1900-0730', '0900-1300', '0700-1530', '']);
+  assert.deepStrictEqual(r.designed.dailyHours.map(h => Math.round(h * 100) / 100), [0, 8.5, 12.5, 12.5, 4, 8.5, 0]);
+});
+
+test('the unpaid break applies per scheduled day, not per week', () => {
+  const r = SGCalc.computeModel(model({}, [timed(
+    [OFF, T('0700', '1930'), T('0700', '1930'), T('0700', '1930'), OFF, OFF, OFF],
+    { breakMinutes: 30, qty: 1 }
+  )]));
+  close(r.positions[0].weeklyHoursPerPerson, 36);   // 3 x 12.0, not 3 x 12.5 - 0.5
+  close(r.designed.wFTE, 0.9);
+});
+
+test('three 12s a night with a break is 0.9 wFTE, and qty multiplies it', () => {
+  const r = SGCalc.computeModel(model({}, [timed(
+    [T('1900', '0730'), T('1900', '0730'), T('1900', '0730'), OFF, OFF, OFF, OFF],
+    { breakMinutes: 30, qty: 6 }
+  )]));
+  close(r.positions[0].weeklyHoursPerPerson, 36);
+  close(r.positions[0].weeklyHours, 216);
+  close(r.designed.wFTE, 5.4);
+});
+
+test('a row can still be entered as plain hours', () => {
+  const r = SGCalc.computeModel(model({}, [
+    { entryMode: 'hours', qty: 2, hours: [0, 8, 8, 8, 8, 8, 0], breakMinutes: 45,
+      times: [T('0700', '1930'), OFF, OFF, OFF, OFF, OFF, OFF] }
+  ]));
+  // hours mode ignores both the times and the break
+  close(r.positions[0].weeklyHoursPerPerson, 40);
+  close(r.designed.wFTE, 2);
+  assert.deepStrictEqual(r.positions[0].dayLabels, ['', '', '', '', '', '', '']);
+});
+
+test('entry mode is inferred so models saved before times still open correctly', () => {
+  const legacy = SGCalc.newPosition({ role: 'RN', qty: 3, hours: [0, 12, 12, 12, 0, 0, 0] });
+  assert.strictEqual(legacy.entryMode, 'hours');
+  assert.strictEqual(legacy.breakMinutes, 0);
+  assert.deepStrictEqual(legacy.times, SGCalc.emptyTimes());
+
+  const withTimes = SGCalc.newPosition({ role: 'RN', times: [T('0700', '1930'), OFF, OFF, OFF, OFF, OFF, OFF] });
+  assert.strictEqual(withTimes.entryMode, 'times');
+
+  const blank = SGCalc.newPosition();
+  assert.strictEqual(blank.entryMode, 'times');
+
+  // A whole legacy model keeps its numbers unchanged.
+  const legacyModel = model({}, []);
+  legacyModel.positions = [{ id: 'p1', role: 'RN', qty: 6, hours: [12, 12, 12, 0, 0, 0, 0] }];
+  close(SGCalc.computeModel(legacyModel).designed.wFTE, 5.4);
+  close(SGCalc.computeModel(SGCalc.newModel(legacyModel)).designed.wFTE, 5.4);
+});
+
+test('an untyped shift label falls back to the most common time range', () => {
+  const r = SGCalc.computeModel(model({}, [
+    timed([OFF, T('0700', '1930'), T('0700', '1930'), T('0900', '1300'), OFF, OFF, OFF]),
+    timed([OFF, T('0800', '1630'), OFF, OFF, OFF, OFF, OFF], { shift: 'Days' })
+  ]));
+  assert.strictEqual(r.positions[0].derivedShift, '0700-1930');
+  assert.strictEqual(r.positions[0].shiftDisplay, '0700-1930');
+  assert.strictEqual(r.positions[1].shiftDisplay, 'Days');   // a typed label always wins
+});
+
+test('per-day times flow through to the productivity breakdowns', () => {
+  const r = SGCalc.computeModel(model({ budget: { whpu: 4 } }, [
+    timed([OFF, T('0700', '1900'), T('0700', '1100'), OFF, OFF, OFF, OFF], { qty: 2 })
+  ]));
+  close(r.productivity.byDay[1].hours, 24);          // 12 hrs x 2 people
+  close(r.productivity.byDay[1].requiredUnits, 6);   // 24 / 4
+  close(r.productivity.byDay[2].requiredUnits, 2);   // 8 / 4
+  close(r.productivity.byPosition[0].dayUnits[1], 3); // one person: 12 / 4
+  assert.deepStrictEqual(r.productivity.byPosition[0].dayLabels[1], '0700-1900');
+});
+
+test('the workbook gains a shift schedule sheet showing the times', () => {
+  const m = model({}, [timed([OFF, T('0700', '1930'), T('1900', '0730'), OFF, OFF, OFF, OFF], { breakMinutes: 30 })]);
+  const wb = SGExport.buildWorkbook(m, SGCalc.computeModel(m));
+  assert.deepStrictEqual(wb.sheets.map(s => s.name),
+    ['Summary', 'Staffing Grid', 'Shift Schedule', 'Productivity by Day', 'Productivity by Person']);
+
+  const rows = wb.sheets[2].rows;
+  const body = rows[rows.length - 1];
+  assert.strictEqual(body[3].v, 30);          // unpaid break
+  assert.strictEqual(body[4].v, 'Off');       // Sunday
+  assert.strictEqual(body[5].v, '0700-1930');
+  assert.strictEqual(body[6].v, '1900-0730');
+  close(body[11].v, 24);                      // 12 + 12 after the break
+
+  const xml = Buffer.from(SGXlsx.build(wb)).toString('latin1');
+  assert.ok(xml.includes('0700-1930'));
 });
