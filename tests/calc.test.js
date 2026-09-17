@@ -240,7 +240,9 @@ test('export filenames are filesystem-safe and carry the version date', () => {
 /* ---------------- start / end shift times ---------------- */
 
 function timed(times, extra = {}) {
-  return Object.assign({ entryMode: 'times', qty: 1, times }, extra);
+  // breakMinutes pinned to 0 here so these cases measure the raw clock span;
+  // the 30-minute default is covered by its own tests below.
+  return Object.assign({ entryMode: 'times', qty: 1, breakMinutes: 0, times }, extra);
 }
 const T = (start, end) => ({ start, end });
 const OFF = { start: '', end: '' };
@@ -346,7 +348,6 @@ test('a row can still be entered as plain hours', () => {
 test('entry mode is inferred so models saved before times still open correctly', () => {
   const legacy = SGCalc.newPosition({ role: 'RN', qty: 3, hours: [0, 12, 12, 12, 0, 0, 0] });
   assert.strictEqual(legacy.entryMode, 'hours');
-  assert.strictEqual(legacy.breakMinutes, 0);
   assert.deepStrictEqual(legacy.times, SGCalc.emptyTimes());
 
   const withTimes = SGCalc.newPosition({ role: 'RN', times: [T('0700', '1930'), OFF, OFF, OFF, OFF, OFF, OFF] });
@@ -399,4 +400,54 @@ test('the workbook gains a shift schedule sheet showing the times', () => {
 
   const xml = Buffer.from(SGXlsx.build(wb)).toString('latin1');
   assert.ok(xml.includes('0700-1930'));
+});
+
+test('a new position row starts with a 30-minute unpaid break', () => {
+  assert.strictEqual(SGCalc.DEFAULT_BREAK_MINUTES, 30);
+  assert.strictEqual(SGCalc.newPosition().breakMinutes, 30);
+
+  // so a 12-hour shift reads as 12.0 worked hours straight away
+  const r = SGCalc.computeModel(model({}, [
+    { entryMode: 'times', qty: 1, times: [OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, OFF] }
+  ]));
+  close(r.positions[0].hours[1], 12);
+  close(r.positions[0].breakMinutes, 30);
+});
+
+test('the break stays editable and an explicit value always wins', () => {
+  for (const [entered, expected] of [[0, 0], [45, 45], ['20', 20], ['', 0]]) {
+    assert.strictEqual(SGCalc.newPosition({ breakMinutes: entered }).breakMinutes, expected,
+      `breakMinutes ${JSON.stringify(entered)}`);
+  }
+  // 0 means paid straight through, not "unset" - the default must not creep back
+  const r = SGCalc.computeModel(model({}, [
+    { entryMode: 'times', qty: 1, breakMinutes: 0, times: [OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, OFF] }
+  ]));
+  close(r.positions[0].hours[1], 12.5);
+
+  const long = SGCalc.computeModel(model({}, [
+    { entryMode: 'times', qty: 1, breakMinutes: 60, times: [OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, OFF] }
+  ]));
+  close(long.positions[0].hours[1], 11.5);
+});
+
+test('a saved model keeps the break it was saved with', () => {
+  const saved = SGCalc.newModel({
+    departmentName: 'Saved unit',
+    positions: [{ id: 'p1', entryMode: 'times', qty: 1, breakMinutes: 0,
+                  times: [OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, OFF] }]
+  });
+  assert.strictEqual(saved.positions[0].breakMinutes, 0);
+  close(SGCalc.computeModel(saved).positions[0].hours[1], 12.5);
+
+  // reloading it again must not reintroduce the default
+  assert.strictEqual(SGCalc.newModel(saved).positions[0].breakMinutes, 0);
+});
+
+test('a legacy hours-mode row is unaffected by the default break', () => {
+  const legacy = SGCalc.newPosition({ role: 'RN', qty: 3, hours: [0, 12, 12, 12, 0, 0, 0] });
+  assert.strictEqual(legacy.entryMode, 'hours');
+  assert.strictEqual(legacy.breakMinutes, 30);   // carried, but unused in hours mode
+  const r = SGCalc.computeModel(model({}, [legacy]));
+  close(r.positions[0].weeklyHoursPerPerson, 36);
 });

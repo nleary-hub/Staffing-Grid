@@ -51,9 +51,10 @@ form when you leave the box.
 
 - An end time at or before the start is read as an **overnight shift**, so
   `1900`–`0730` is 12.5 hours.
-- **Unpaid break (min)** is deducted from every day that has a shift, so
-  `0700`–`1930` with a 30-minute break is 12.0 worked hours, not 12.5. Leave it
-  at 0 if your shifts are paid straight through.
+- **Unpaid break (min)** is deducted from every day that has a shift and
+  starts at **30 minutes** on a new row, so `0700`–`1930` comes to 12.0 worked
+  hours rather than 12.5. Change it per row, or set it to 0 for shifts paid
+  straight through. A saved model always keeps the break it was saved with.
 - A blank day is a day off.
 - The `⇉` row button copies the first day's times across all seven days.
 - *Hours from* can be switched from **Times** to **Hours** on any row to type
@@ -156,7 +157,7 @@ exports follow.
 npm test          # or: node --test tests/*.test.js
 ```
 
-35 tests cover the FTE and productivity math, time parsing in every accepted
+39 tests cover the FTE and productivity math, time parsing in every accepted
 format, overnight shifts and unpaid breaks, each PTO basis, the override
 behavior, the over-budget flag, department isolation in storage, backward
 compatibility with models saved before shift times, and the generated

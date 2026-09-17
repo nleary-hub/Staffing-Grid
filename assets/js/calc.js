@@ -13,6 +13,17 @@
   var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   var DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+  // Most shifts carry an unpaid meal break, so a new row starts at 30 minutes.
+  // Managers change it per row, and 0 (or a cleared box) means paid straight
+  // through. Only a row that has never carried a value takes the default, so
+  // saved models keep exactly the break they were saved with.
+  var DEFAULT_BREAK_MINUTES = 30;
+
+  function breakMinutesOf(position) {
+    var v = position ? position.breakMinutes : undefined;
+    return (v === undefined || v === null) ? DEFAULT_BREAK_MINUTES : n0(v);
+  }
+
   var PTO_BASIS = {
     paidPct: 'PTO as % of paid hours',
     workedPct: 'PTO as % of worked hours',
@@ -168,7 +179,7 @@
       shift: seed.shift || '',
       qty: seed.qty === undefined ? 1 : seed.qty,
       entryMode: mode,                            // 'times' | 'hours'
-      breakMinutes: seed.breakMinutes === undefined ? 0 : seed.breakMinutes,
+      breakMinutes: breakMinutesOf(seed),
       times: times,
       hours: hours
     };
@@ -267,7 +278,7 @@
     var positions = ((model && model.positions) || []).map(function (p) {
       var qty = n0(p.qty) || 0;
       var mode = inferEntryMode(p);
-      var breakMinutes = n0(p.breakMinutes);
+      var breakMinutes = breakMinutesOf(p);
       var times = normalizeTimes(p.times);
       var rawHours = (p.hours || emptyHours());
       var hours = [], dayLabels = [];
@@ -433,6 +444,7 @@
     DAYS: DAYS,
     DAY_NAMES: DAY_NAMES,
     PTO_BASIS: PTO_BASIS,
+    DEFAULT_BREAK_MINUTES: DEFAULT_BREAK_MINUTES,
     num: num,
     emptyHours: emptyHours,
     emptyTimes: emptyTimes,
