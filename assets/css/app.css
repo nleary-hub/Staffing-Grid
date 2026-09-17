@@ -211,16 +211,73 @@ table input[type="number"] { min-width: 58px; }
 .grid-table td.day-cell { padding: 3px 4px; min-width: 62px; }
 .grid-table td.day-cell input { text-align: center; }
 
-/* The grid scrolls sideways once every day carries times, so keep the Role
-   column pinned - otherwise you lose track of which row you are editing. */
-.grid-table th:first-child,
-.grid-table td:first-child { position: sticky; left: 0; z-index: 3; background: #fff; }
-.grid-table thead th:first-child { z-index: 5; background: var(--cm-blue); }
-.grid-table tbody tr:nth-child(even) td:first-child { background: #fafcfe; }
-.grid-table tbody tr:hover td:first-child { background: var(--cm-blue-light); }
-.grid-table tfoot td:first-child { background: var(--cm-blue-light) !important; }
-.grid-table td:first-child::after {
+/* The grid scrolls sideways once every day carries times, so keep the drag
+   handle and Role pinned - otherwise you lose track of which row you edit.
+   Selected by data-col, not position, so hiding a column cannot shift them. */
+.grid-table th[data-col="handle"],
+.grid-table td[data-col="handle"] {
+  position: sticky; left: 0; z-index: 3; background: #fff;
+  width: 30px; min-width: 30px; padding: 2px; text-align: center;
+}
+.grid-table th[data-col="role"],
+.grid-table td[data-col="role"] { position: sticky; left: 30px; z-index: 3; background: #fff; }
+.grid-table thead th[data-col="handle"],
+.grid-table thead th[data-col="role"] { z-index: 5; background: var(--cm-blue); }
+.grid-table tbody tr:nth-child(even) td[data-col="handle"],
+.grid-table tbody tr:nth-child(even) td[data-col="role"] { background: #fafcfe; }
+.grid-table tbody tr:hover td[data-col="handle"],
+.grid-table tbody tr:hover td[data-col="role"] { background: var(--cm-blue-light); }
+.grid-table tfoot td[data-col="handle"],
+.grid-table tfoot td[data-col="role"] { background: var(--cm-blue-light) !important; }
+.grid-table td[data-col="role"]::after {
   content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; background: var(--line);
+}
+
+/* drag-to-reorder */
+.drag-handle {
+  cursor: grab; border: none; background: transparent; color: #a8b4c0;
+  padding: 2px 3px; font-size: 13px; line-height: 1; letter-spacing: -2px; border-radius: 4px;
+}
+.drag-handle:hover { background: var(--cm-blue-light); color: var(--cm-blue); }
+.drag-handle:active { cursor: grabbing; }
+.drag-handle:focus-visible { outline: 2px solid var(--cm-teal); color: var(--cm-blue); }
+.grid-table tr.dragging { opacity: .45; }
+.grid-table tr.drop-above td { box-shadow: inset 0 3px 0 -1px var(--cm-green-dark); }
+.grid-table tr.drop-below td { box-shadow: inset 0 -3px 0 -1px var(--cm-green-dark); }
+.grid-table tr.just-moved td { animation: rowSettle .7s ease-out; }
+@keyframes rowSettle {
+  from { background: #e7f5e7; }
+  to { background: transparent; }
+}
+
+/* column picker */
+.col-picker { position: relative; display: inline-block; }
+.col-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(16, 32, 48, .16);
+  padding: 10px 12px; min-width: 210px; max-height: 340px; overflow: auto;
+}
+.col-panel[hidden] { display: none; }
+.col-panel-head {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line-soft);
+  font-size: 13px; color: var(--cm-blue-dark);
+}
+.col-group-name {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink-soft); font-weight: 700; margin: 8px 0 3px;
+}
+.col-toggle {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500;
+  color: var(--ink); margin: 0; padding: 2px 3px; border-radius: 4px; cursor: pointer;
+}
+.col-toggle:hover { background: var(--cm-blue-light); }
+.col-toggle input { width: auto; margin: 0; }
+#col-count { font-weight: 500; color: var(--ink-soft); font-size: 12px; }
+.col-panel-note {
+  margin: 10px 0 0; padding-top: 7px; border-top: 1px solid var(--line-soft);
+  font-size: 11px; line-height: 1.35; color: var(--ink-soft);
 }
 
 /* per-day start / end time entry */

@@ -212,6 +212,13 @@
         budgetedWFTE: '',
         budgetedPFTE: ''
       }, seed.budget || {}),
+      // Which grid columns the manager has hidden. Purely a view preference,
+      // saved with the model so each department's grid opens the way they left it.
+      viewOptions: {
+        hiddenColumns: Array.isArray(seed.viewOptions && seed.viewOptions.hiddenColumns)
+          ? seed.viewOptions.hiddenColumns.slice()
+          : []
+      },
       positions: (seed.positions || []).map(newPosition),
       createdAt: seed.createdAt || new Date().toISOString(),
       updatedAt: seed.updatedAt || new Date().toISOString()

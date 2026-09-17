@@ -5,6 +5,33 @@
   'use strict';
 
   var DAYS = SGCalc.DAYS;
+
+  // Every toggleable grid column. 'handle' and 'actions' are controls, not data,
+  // so they are never hidden.
+  var COLUMNS = [
+    { key: 'role', label: 'Role', group: 'Position' },
+    { key: 'assignee', label: 'Assigned to', group: 'Position' },
+    { key: 'assigneeType', label: 'Type', group: 'Position' },
+    { key: 'shift', label: 'Shift label', group: 'Position' },
+    { key: 'qty', label: 'Qty', group: 'Position' },
+    { key: 'entryMode', label: 'Hours from', group: 'Schedule' },
+    { key: 'breakMinutes', label: 'Unpaid break', group: 'Schedule' },
+    { key: 'day0', label: 'Sunday', group: 'Schedule' },
+    { key: 'day1', label: 'Monday', group: 'Schedule' },
+    { key: 'day2', label: 'Tuesday', group: 'Schedule' },
+    { key: 'day3', label: 'Wednesday', group: 'Schedule' },
+    { key: 'day4', label: 'Thursday', group: 'Schedule' },
+    { key: 'day5', label: 'Friday', group: 'Schedule' },
+    { key: 'day6', label: 'Saturday', group: 'Schedule' },
+    { key: 'hrsPerPerson', label: 'Hrs/wk per person', group: 'Calculated' },
+    { key: 'totalHrs', label: 'Total hrs/wk', group: 'Calculated' },
+    { key: 'annualHrs', label: 'Annual worked hrs', group: 'Calculated' },
+    { key: 'wFTE', label: 'wFTE', group: 'Calculated' },
+    { key: 'pFTE', label: 'pFTE', group: 'Calculated' }
+  ];
+
+  var dragFrom = null;   // index of the row being dragged
+
   var state = {
     model: SGCalc.newModel(),
     computed: null,
@@ -80,6 +107,61 @@
     target[last] = value;
   }
 
+  /* ---------- column visibility ---------- */
+  function hiddenSet() {
+    var vo = state.model.viewOptions || (state.model.viewOptions = { hiddenColumns: [] });
+    if (!Array.isArray(vo.hiddenColumns)) vo.hiddenColumns = [];
+    return vo.hiddenColumns;
+  }
+
+  function isHidden(key) {
+    return hiddenSet().indexOf(key) >= 0;
+  }
+
+  function setColumnHidden(key, hidden) {
+    var list = hiddenSet();
+    var at = list.indexOf(key);
+    if (hidden && at < 0) list.push(key);
+    if (!hidden && at >= 0) list.splice(at, 1);
+    markDirty(true);
+    applyColumnVisibility();
+    renderColumnPanel();
+  }
+
+  // Toggling display on the cells themselves keeps colspan-free rows honest and
+  // survives a re-render, since every cell carries its own data-col.
+  function applyColumnVisibility() {
+    var hidden = hiddenSet();
+    $$('#grid-table [data-col]').forEach(function (cell) {
+      var key = cell.getAttribute('data-col');
+      cell.style.display = hidden.indexOf(key) >= 0 ? 'none' : '';
+    });
+    var n = hidden.length;
+    $('#col-count').textContent = n ? '(' + (COLUMNS.length - n) + '/' + COLUMNS.length + ')' : '';
+  }
+
+  function renderColumnPanel() {
+    var list = $('#column-list');
+    list.innerHTML = '';
+    var groups = [];
+    COLUMNS.forEach(function (c) { if (groups.indexOf(c.group) < 0) groups.push(c.group); });
+
+    groups.forEach(function (g) {
+      list.appendChild(el('div', { class: 'col-group-name', text: g }));
+      COLUMNS.filter(function (c) { return c.group === g; }).forEach(function (c) {
+        var box = el('input', {
+          type: 'checkbox',
+          id: 'col-' + c.key,
+          onchange: function (e) { setColumnHidden(c.key, !e.target.checked); }
+        });
+        box.checked = !isHidden(c.key);
+        list.appendChild(el('label', { class: 'col-toggle', for: 'col-' + c.key }, [
+          box, el('span', { text: c.label })
+        ]));
+      });
+    });
+  }
+
   function markDirty(dirty) {
     state.dirty = dirty;
     $('#save-state').textContent = dirty ? 'Unsaved changes' : (state.savedId ? 'All changes saved' : 'No unsaved changes');
@@ -129,7 +211,7 @@
 
     if (!state.model.positions.length) {
       body.appendChild(el('tr', { class: 'empty-row' }, [
-        el('td', { colspan: '20', text: 'No positions yet — choose "+ Add position" to start building the grid.' })
+        el('td', { colspan: '21', text: 'No positions yet — choose "+ Add position" to start building the grid.' })
       ]));
     }
 
@@ -137,12 +219,55 @@
       var computedRow = (state.computed && state.computed.positions[index]) || {};
       var tr = el('tr');
 
-      tr.appendChild(el('td', {}, [el('input', {
+      var handle = el('button', {
+        type: 'button', class: 'drag-handle', draggable: 'true', text: '⋮⋮',
+        title: 'Drag to reorder this position (or focus and press the up / down arrow keys)',
+        'aria-label': 'Reorder position ' + (index + 1) + (pos.role ? ': ' + pos.role : ''),
+        ondragstart: function (e) {
+          dragFrom = index;
+          tr.classList.add('dragging');
+          if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(index));
+            if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(tr, 12, 12);
+          }
+        },
+        ondragend: function () {
+          dragFrom = null;
+          tr.classList.remove('dragging');
+          $$('#grid-body tr').forEach(function (r) { r.classList.remove('drop-above', 'drop-below'); });
+        },
+        onkeydown: function (e) {
+          if (e.key === 'ArrowUp') { e.preventDefault(); moveRow(index, index - 1); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); moveRow(index, index + 1); }
+        }
+      });
+      tr.appendChild(el('td', { class: 'handle-cell', 'data-col': 'handle' }, [handle]));
+
+      tr.addEventListener('dragover', function (e) {
+        if (dragFrom === null || dragFrom === index) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        tr.classList.toggle('drop-above', index < dragFrom);
+        tr.classList.toggle('drop-below', index > dragFrom);
+      });
+      tr.addEventListener('dragleave', function () {
+        tr.classList.remove('drop-above', 'drop-below');
+      });
+      tr.addEventListener('drop', function (e) {
+        e.preventDefault();
+        tr.classList.remove('drop-above', 'drop-below');
+        var from = dragFrom;
+        dragFrom = null;
+        moveRow(from, index);
+      });
+
+      tr.appendChild(el('td', { 'data-col': 'role' }, [el('input', {
         value: pos.role || '', placeholder: 'e.g. RN – Night',
         oninput: function (e) { pos.role = e.target.value; touchRow(); }
       })]));
 
-      tr.appendChild(el('td', {}, [el('input', {
+      tr.appendChild(el('td', { 'data-col': 'assignee' }, [el('input', {
         value: pos.assignee || '', placeholder: 'Job title or person',
         oninput: function (e) { pos.assignee = e.target.value; touchRow(); }
       })]));
@@ -155,15 +280,15 @@
         el('option', { value: 'open', text: 'Open/TBD' })
       ]);
       sel.value = pos.assigneeType || 'title';
-      tr.appendChild(el('td', {}, [sel]));
+      tr.appendChild(el('td', { 'data-col': 'assigneeType' }, [sel]));
 
-      tr.appendChild(el('td', {}, [el('input', {
+      tr.appendChild(el('td', { 'data-col': 'shift' }, [el('input', {
         value: pos.shift || '', placeholder: 'e.g. Days, Nights',
         title: 'Optional label. Left blank, reports use the shift times.',
         oninput: function (e) { pos.shift = e.target.value; touchRow(); }
       })]));
 
-      tr.appendChild(el('td', { class: 'num' }, [el('input', {
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'qty' }, [el('input', {
         type: 'number', step: 'any', min: '0', value: pos.qty,
         oninput: function (e) { pos.qty = e.target.value; touchRow(); }
       })]));
@@ -181,9 +306,9 @@
         el('option', { value: 'hours', text: 'Hours' })
       ]);
       modeSel.value = usesTimes ? 'times' : 'hours';
-      tr.appendChild(el('td', {}, [modeSel]));
+      tr.appendChild(el('td', { 'data-col': 'entryMode' }, [modeSel]));
 
-      tr.appendChild(el('td', { class: 'num' }, [el('input', {
+      tr.appendChild(el('td', { class: 'num', 'data-col': 'breakMinutes' }, [el('input', {
         type: 'number', step: '5', min: '0', value: pos.breakMinutes,
         disabled: usesTimes ? null : 'disabled',
         title: usesTimes ? 'Unpaid break deducted from each day that has a shift'
@@ -194,7 +319,7 @@
 
       DAYS.forEach(function (d, i) {
         if (!usesTimes) {
-          tr.appendChild(el('td', { class: 'day-cell' }, [el('input', {
+          tr.appendChild(el('td', { class: 'day-cell', 'data-col': 'day' + i }, [el('input', {
             type: 'number', step: 'any', min: '0', value: pos.hours[i] || 0,
             'aria-label': d + ' hours',
             oninput: function (e) { pos.hours[i] = e.target.value; touchRow(); }
@@ -215,19 +340,19 @@
           oninput: function (e) { pos.times[i].end = e.target.value; touchRow(); },
           onblur: function (e) { normalizeTimeInput(e.target, pos, i, 'end'); }
         });
-        tr.appendChild(el('td', { class: 'day-cell time-cell' }, [
+        tr.appendChild(el('td', { class: 'day-cell time-cell', 'data-col': 'day' + i }, [
           el('div', { class: 'time-pair' }, [startInput, endInput]),
           el('div', { class: 'day-hours' })
         ]));
       });
 
-      tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.weeklyHoursPerPerson, 1) }));
-      tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.weeklyHours, 1) }));
-      tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.annualWorkedHours, 0) }));
-      tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.wFTE, 2) }));
-      tr.appendChild(el('td', { class: 'calc', text: fmt(computedRow.pFTE, 2) }));
+      tr.appendChild(el('td', { class: 'calc', 'data-col': 'hrsPerPerson', text: fmt(computedRow.weeklyHoursPerPerson, 1) }));
+      tr.appendChild(el('td', { class: 'calc', 'data-col': 'totalHrs', text: fmt(computedRow.weeklyHours, 1) }));
+      tr.appendChild(el('td', { class: 'calc', 'data-col': 'annualHrs', text: fmt(computedRow.annualWorkedHours, 0) }));
+      tr.appendChild(el('td', { class: 'calc', 'data-col': 'wFTE', text: fmt(computedRow.wFTE, 2) }));
+      tr.appendChild(el('td', { class: 'calc', 'data-col': 'pFTE', text: fmt(computedRow.pFTE, 2) }));
 
-      tr.appendChild(el('td', {}, [el('div', { class: 'row-actions' }, [
+      tr.appendChild(el('td', { 'data-col': 'actions' }, [el('div', { class: 'row-actions' }, [
         el('button', {
           type: 'button', class: 'icon', title: "Copy the first day's times to all seven days", text: '⇉',
           disabled: pos.entryMode === 'hours' ? 'disabled' : null,
@@ -310,23 +435,53 @@
     renderGridFoot();
   }
 
+  // One cell per column, no colspans - otherwise hiding a column inside a span
+  // would knock the whole footer out of line with the header.
   function renderGridFoot() {
     var r = state.computed;
     var foot = $('#grid-foot');
     foot.innerHTML = '';
     if (!r) return;
+
     var tr = el('tr');
-    tr.appendChild(el('td', { colspan: '4', text: 'TOTAL — ' + r.designed.positionCount + ' position row(s)' }));
-    tr.appendChild(el('td', { class: 'num', text: fmt(r.designed.headcount, 1) }));
-    tr.appendChild(el('td', { colspan: '2', text: '' }));
-    r.designed.dailyHours.forEach(function (h) { tr.appendChild(el('td', { class: 'num', text: fmt(h, 1) })); });
-    tr.appendChild(el('td', { class: 'num', text: '' }));
-    tr.appendChild(el('td', { class: 'num', text: fmt(r.designed.weeklyHours, 1) }));
-    tr.appendChild(el('td', { class: 'num', text: fmt(r.designed.annualWorkedHours, 0) }));
-    tr.appendChild(el('td', { class: 'num' + (r.variance.overWorked ? ' flag-bad' : ''), text: fmt(r.designed.wFTE, 2) }));
-    tr.appendChild(el('td', { class: 'num' + (r.variance.overPaid ? ' flag-bad' : ''), text: fmt(r.designed.pFTE, 2) }));
-    tr.appendChild(el('td', { text: '' }));
+    function cell(key, text, cls) {
+      tr.appendChild(el('td', { 'data-col': key, class: cls || '', text: text === undefined ? '' : text }));
+    }
+    cell('handle', '');
+    cell('role', 'TOTAL — ' + r.designed.positionCount + ' row(s)');
+    cell('assignee', '');
+    cell('assigneeType', '');
+    cell('shift', '');
+    cell('qty', fmt(r.designed.headcount, 1), 'num');
+    cell('entryMode', '');
+    cell('breakMinutes', '');
+    r.designed.dailyHours.forEach(function (h, i) { cell('day' + i, fmt(h, 1), 'num'); });
+    cell('hrsPerPerson', '', 'num');
+    cell('totalHrs', fmt(r.designed.weeklyHours, 1), 'num');
+    cell('annualHrs', fmt(r.designed.annualWorkedHours, 0), 'num');
+    cell('wFTE', fmt(r.designed.wFTE, 2), 'num' + (r.variance.overWorked ? ' flag-bad' : ''));
+    cell('pFTE', fmt(r.designed.pFTE, 2), 'num' + (r.variance.overPaid ? ' flag-bad' : ''));
+    cell('actions', '');
     foot.appendChild(tr);
+    applyColumnVisibility();
+  }
+
+  /* ---------- reordering ---------- */
+  function moveRow(from, to) {
+    var list = state.model.positions;
+    if (from === null || to === null || from === to) return;
+    if (from < 0 || from >= list.length || to < 0 || to >= list.length) return;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    markDirty(true);
+    recompute();
+    renderGrid();
+    var moved = $$('#grid-body tr')[to];
+    if (moved) {
+      var h = moved.querySelector('.drag-handle');
+      if (h) h.focus();
+      moved.classList.add('just-moved');
+      setTimeout(function () { moved.classList.remove('just-moved'); }, 700);
+    }
   }
 
   /* ---------- stat strips ---------- */
@@ -513,6 +668,8 @@
     fillFields();
     recompute();
     renderGrid();
+    renderColumnPanel();
+    applyColumnVisibility();
   }
 
   /* ---------- library ---------- */
@@ -847,6 +1004,22 @@
       markDirty(true); recompute(); renderGrid();
     });
 
+    var panel = $('#column-panel'), colBtn = $('#btn-columns');
+    function closePanel() { panel.hidden = true; colBtn.setAttribute('aria-expanded', 'false'); }
+    colBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      panel.hidden = !panel.hidden;
+      colBtn.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+    });
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.addEventListener('click', closePanel);
+    $('#btn-columns-all').addEventListener('click', function () {
+      hiddenSet().length = 0;
+      markDirty(true);
+      applyColumnVisibility();
+      renderColumnPanel();
+    });
+
     $('#btn-new').addEventListener('click', newModel);
     $('#btn-open').addEventListener('click', openLibrary);
     $('#btn-save').addEventListener('click', function () { save(false); });
@@ -855,7 +1028,7 @@
     $$('[data-close-modal]').forEach(function (b) { b.addEventListener('click', closeLibrary); });
     $('#library-modal').addEventListener('click', function (e) { if (e.target === this) closeLibrary(); });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') closeLibrary();
+      if (e.key === 'Escape') { closeLibrary(); closePanel(); }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(false); }
     });
 

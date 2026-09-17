@@ -64,8 +64,18 @@ form when you leave the box.
 - The *Shift label* column is optional; left blank, reports fall back to the
   row's most common time range (e.g. `0700-1930`).
 
-Rows can be duplicated or removed. The grid calculates hours per week, annual
-worked hours, wFTE and pFTE per row and in total.
+Rows can be duplicated or removed, and **reordered** by dragging the `⋮⋮`
+handle at the left of each row — or by focusing a handle and pressing the up /
+down arrow keys. Order is presentation only; it never changes a total.
+
+The **Columns** button hides any column you don't use — Type, Shift label,
+Hours from, Unpaid break, individual days, or any calculated column. The choice
+is saved with the model, so each department's grid reopens the way it was left,
+and *Show all* brings everything back. Hiding a column changes the on-screen
+view only: every total, FTE figure and export still uses all the data.
+
+The grid calculates hours per week, annual worked hours, wFTE and pFTE per row
+and in total.
 
 **4 · Designed model vs budget** — designed wFTE/pFTE against budget, with the
 variance, % of budget, and a banner at the top of the page that turns red the
@@ -157,11 +167,11 @@ exports follow.
 npm test          # or: node --test tests/*.test.js
 ```
 
-39 tests cover the FTE and productivity math, time parsing in every accepted
+42 tests cover the FTE and productivity math, time parsing in every accepted
 format, overnight shifts and unpaid breaks, each PTO basis, the override
 behavior, the over-budget flag, department isolation in storage, backward
-compatibility with models saved before shift times, and the generated
-workbook.
+compatibility with models saved before shift times, row reordering, hidden
+columns, and the generated workbook.
 
 ## Files
 

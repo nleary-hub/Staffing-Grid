@@ -161,30 +161,43 @@
       <span class="h2-note">Enter each day&rsquo;s start and end time &mdash; hours calculate automatically. Qty = number of people in that position.</span>
     </h2>
     <div class="card-body">
-      <div class="group" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="group grid-tools" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
         <button type="button" class="primary" id="btn-add-row">+ Add position</button>
         <button type="button" id="btn-add-5">+ Add 5 rows</button>
         <button type="button" id="btn-clear-rows" class="ghost-danger">Clear all positions</button>
+        <div class="col-picker">
+          <button type="button" id="btn-columns" aria-expanded="false" aria-controls="column-panel">Columns <span id="col-count"></span> &#9662;</button>
+          <div class="col-panel" id="column-panel" hidden>
+            <div class="col-panel-head">
+              <strong>Show columns</strong>
+              <button type="button" id="btn-columns-all" class="icon">Show all</button>
+            </div>
+            <div id="column-list"></div>
+            <p class="col-panel-note">Hiding a column changes this view only &mdash; every total, FTE and export still uses all the data.</p>
+          </div>
+        </div>
+        <span class="hint" style="margin:0">Drag the <span aria-hidden="true">&#8942;&#8942;</span> handle to reorder a row.</span>
       </div>
       <div class="table-wrap">
         <table class="grid-table" id="grid-table">
           <thead>
             <tr>
-              <th style="min-width:140px">Role</th>
-              <th style="min-width:150px">Assigned to</th>
-              <th style="min-width:88px">Type</th>
-              <th style="min-width:100px">Shift label</th>
-              <th style="min-width:56px">Qty</th>
-              <th style="min-width:86px">Hours from</th>
-              <th style="min-width:66px" title="Deducted from each day that has a shift. New rows start at 30 minutes; set 0 for shifts paid straight through.">Unpaid<br>break (min)</th>
-              <th class="day">Sun</th><th class="day">Mon</th><th class="day">Tue</th>
-              <th class="day">Wed</th><th class="day">Thu</th><th class="day">Fri</th><th class="day">Sat</th>
-              <th class="num">Hrs/wk<br>per person</th>
-              <th class="num">Total<br>hrs/wk</th>
-              <th class="num">Annual<br>worked hrs</th>
-              <th class="num">wFTE</th>
-              <th class="num">pFTE</th>
-              <th></th>
+              <th class="handle-col" data-col="handle" title="Drag a row to reorder it"><span class="sr-only">Reorder</span></th>
+              <th data-col="role" style="min-width:140px">Role</th>
+              <th data-col="assignee" style="min-width:150px">Assigned to</th>
+              <th data-col="assigneeType" style="min-width:88px">Type</th>
+              <th data-col="shift" style="min-width:100px">Shift label</th>
+              <th data-col="qty" style="min-width:56px">Qty</th>
+              <th data-col="entryMode" style="min-width:86px">Hours from</th>
+              <th data-col="breakMinutes" style="min-width:66px" title="Deducted from each day that has a shift. New rows start at 30 minutes; set 0 for shifts paid straight through.">Unpaid<br>break (min)</th>
+              <th class="day" data-col="day0">Sun</th><th class="day" data-col="day1">Mon</th><th class="day" data-col="day2">Tue</th>
+              <th class="day" data-col="day3">Wed</th><th class="day" data-col="day4">Thu</th><th class="day" data-col="day5">Fri</th><th class="day" data-col="day6">Sat</th>
+              <th class="num" data-col="hrsPerPerson">Hrs/wk<br>per person</th>
+              <th class="num" data-col="totalHrs">Total<br>hrs/wk</th>
+              <th class="num" data-col="annualHrs">Annual<br>worked hrs</th>
+              <th class="num" data-col="wFTE">wFTE</th>
+              <th class="num" data-col="pFTE">pFTE</th>
+              <th data-col="actions"></th>
             </tr>
           </thead>
           <tbody id="grid-body"></tbody>

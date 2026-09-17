@@ -451,3 +451,54 @@ test('a legacy hours-mode row is unaffected by the default break', () => {
   const r = SGCalc.computeModel(model({}, [legacy]));
   close(r.positions[0].weeklyHoursPerPerson, 36);
 });
+
+/* ---------------- view options ---------------- */
+
+test('hidden columns are stored with the model and default to none', () => {
+  assert.deepStrictEqual(SGCalc.newModel().viewOptions.hiddenColumns, []);
+
+  const m = SGCalc.newModel({ departmentName: 'ICU', viewOptions: { hiddenColumns: ['shift', 'day6'] } });
+  assert.deepStrictEqual(m.viewOptions.hiddenColumns, ['shift', 'day6']);
+
+  // reloading a saved model keeps them, and the array is copied not shared
+  const reloaded = SGCalc.newModel(m);
+  assert.deepStrictEqual(reloaded.viewOptions.hiddenColumns, ['shift', 'day6']);
+  reloaded.viewOptions.hiddenColumns.push('qty');
+  assert.deepStrictEqual(m.viewOptions.hiddenColumns, ['shift', 'day6']);
+
+  // a model saved before view options existed opens with nothing hidden
+  assert.deepStrictEqual(SGCalc.newModel({ departmentName: 'Legacy' }).viewOptions.hiddenColumns, []);
+  assert.deepStrictEqual(SGCalc.newModel({ viewOptions: { hiddenColumns: 'nonsense' } }).viewOptions.hiddenColumns, []);
+});
+
+test('hiding a column never changes the numbers', () => {
+  const positions = [timed([OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, T('0700', '1930')], { qty: 2 })];
+  const shown = SGCalc.computeModel(model({}, positions));
+  const hidden = SGCalc.computeModel(
+    Object.assign(model({}, positions), { viewOptions: { hiddenColumns: ['day6', 'qty', 'wFTE'] } }));
+
+  close(hidden.designed.wFTE, shown.designed.wFTE);
+  close(hidden.designed.weeklyHours, shown.designed.weeklyHours);
+  assert.deepStrictEqual(hidden.designed.dailyHours, shown.designed.dailyHours);
+  close(shown.designed.dailyHours[6], 25);   // Saturday still counted while hidden
+});
+
+test('reordering positions preserves every row and its data', () => {
+  const m = model({}, [
+    timed([OFF, T('0700', '1930'), OFF, OFF, OFF, OFF, OFF], { role: 'Alpha', qty: 1 }),
+    timed([OFF, T('0700', '1530'), OFF, OFF, OFF, OFF, OFF], { role: 'Bravo', qty: 2 }),
+    timed([OFF, T('1900', '0730'), OFF, OFF, OFF, OFF, OFF], { role: 'Charlie', qty: 3 })
+  ]);
+  const before = SGCalc.computeModel(m);
+
+  // move the last row to the front, exactly as the grid's move does
+  m.positions.splice(0, 0, m.positions.splice(2, 1)[0]);
+  const after = SGCalc.computeModel(m);
+
+  assert.deepStrictEqual(after.positions.map(p => p.role), ['Charlie', 'Alpha', 'Bravo']);
+  assert.deepStrictEqual(after.positions.map(p => p.qty), [3, 1, 2]);
+  // order is presentation only: the department totals are unchanged
+  close(after.designed.wFTE, before.designed.wFTE);
+  close(after.designed.weeklyHours, before.designed.weeklyHours);
+  assert.deepStrictEqual(after.designed.dailyHours, before.designed.dailyHours);
+});
