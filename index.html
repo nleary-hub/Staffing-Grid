@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staffing Grid Builder | CaroMont Health</title>
+<meta name="description" content="Department staffing grid and FTE model builder for CaroMont Health managers.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%2300427a'/><text x='16' y='22' font-size='16' font-family='Segoe UI,Arial' font-weight='bold' fill='white' text-anchor='middle'>C</text></svg>">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true">C<span>M</span></div>
+    <div class="brand-text">
+      <div class="brand-name">CaroMont Health</div>
+      <div class="brand-sub">Staffing Grid &amp; FTE Model Builder</div>
+    </div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-meta">
+    <strong id="hdr-dept">New model</strong>
+    <span id="hdr-version">Version &mdash; &middot; not yet saved</span>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="group">
+    <button type="button" id="btn-new">New model</button>
+    <button type="button" id="btn-open">Open saved&hellip;</button>
+    <button type="button" class="primary" id="btn-save">Save</button>
+    <button type="button" id="btn-save-as">Save as new version</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <button type="button" class="accent" id="btn-excel">Export Excel</button>
+    <button type="button" class="accent" id="btn-pdf">Export PDF</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <button type="button" id="btn-export-json">Backup file</button>
+    <button type="button" id="btn-import-json">Restore/Import</button>
+    <input type="file" id="file-import" accept="application/json,.json" class="sr-only" aria-hidden="true">
+  </div>
+  <div class="header-spacer"></div>
+  <div class="group">
+    <span class="hint" id="save-state">No unsaved changes</span>
+  </div>
+</div>
+
+<main>
+
+  <div id="flag-zone"></div>
+
+  <!-- ============ Department ============ -->
+  <section class="card">
+    <h2>1 &nbsp;&middot;&nbsp; Department &amp; version
+      <span class="h2-note">Each saved model belongs to one department and never overwrites another.</span>
+    </h2>
+    <div class="card-body">
+      <div class="grid-fields">
+        <div class="field wide">
+          <label for="f-departmentName">Department name</label>
+          <input id="f-departmentName" data-bind="departmentName" placeholder="e.g. 4 West Medical/Surgical">
+        </div>
+        <div class="field">
+          <label for="f-departmentCode">Cost center / dept #</label>
+          <input id="f-departmentCode" data-bind="departmentCode" placeholder="e.g. 6120">
+        </div>
+        <div class="field">
+          <label for="f-facility">Facility / entity</label>
+          <input id="f-facility" data-bind="facility" placeholder="e.g. CaroMont Regional Medical Center">
+        </div>
+        <div class="field">
+          <label for="f-preparedBy">Prepared by</label>
+          <input id="f-preparedBy" data-bind="preparedBy" placeholder="Manager name">
+        </div>
+        <div class="field">
+          <label for="f-fiscalYear">Fiscal year</label>
+          <input id="f-fiscalYear" data-bind="fiscalYear" placeholder="e.g. FY2026">
+        </div>
+        <div class="field">
+          <label for="f-versionDate">Version date</label>
+          <input type="date" id="f-versionDate" data-bind="versionDate">
+        </div>
+        <div class="field">
+          <label for="f-versionLabel">Version label</label>
+          <input id="f-versionLabel" data-bind="versionLabel" placeholder="e.g. v2 &ndash; budget submission">
+        </div>
+        <div class="field wide">
+          <label for="f-notes">Notes / assumptions</label>
+          <textarea id="f-notes" data-bind="notes" placeholder="Assumptions, coverage rules, approvals&hellip;"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Budget ============ -->
+  <section class="card">
+    <h2>2 &nbsp;&middot;&nbsp; Budget statistics
+      <span class="h2-note">Leave budgeted wFTE / pFTE blank to calculate them from volume &amp; WHpU.</span>
+    </h2>
+    <div class="card-body">
+      <div class="grid-fields">
+        <div class="field">
+          <label for="f-volumeUnit">Volume unit</label>
+          <input id="f-volumeUnit" data-bind="budget.volumeUnit" placeholder="Patient Days, Visits, Cases&hellip;">
+        </div>
+        <div class="field">
+          <label for="f-annualVolume">Annual budgeted volume</label>
+          <input type="number" step="any" min="0" id="f-annualVolume" data-bind="budget.annualVolume" placeholder="0">
+        </div>
+        <div class="field">
+          <label for="f-whpu">Worked hours per unit (WHpU)</label>
+          <input type="number" step="any" min="0" id="f-whpu" data-bind="budget.whpu" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label for="f-fteHours">FTE hours per year</label>
+          <input type="number" step="any" min="1" id="f-fteHours" data-bind="budget.fteHours">
+          <div class="hint">2,080 = 40 hrs &times; 52 weeks</div>
+        </div>
+        <div class="field">
+          <label for="f-ptoBasis">PTO / benefit basis</label>
+          <select id="f-ptoBasis" data-bind="budget.ptoBasis">
+            <option value="paidPct">Historical PTO usage &mdash; % of paid hours</option>
+            <option value="workedPct">Historical PTO usage &mdash; % of worked hours</option>
+            <option value="ptoFTE">Budgeted PTO &mdash; as FTE</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-ptoValue"><span id="pto-label">PTO % of paid hours</span></label>
+          <input type="number" step="any" min="0" id="f-ptoValue" data-bind="budget.ptoValue" placeholder="e.g. 11">
+          <div class="hint" id="pto-hint">Enter 11 for 11%.</div>
+        </div>
+        <div class="field">
+          <label for="f-budgetedWFTE">Budgeted worked FTE (optional)</label>
+          <input type="number" step="any" min="0" id="f-budgetedWFTE" data-bind="budget.budgetedWFTE" placeholder="auto">
+        </div>
+        <div class="field">
+          <label for="f-budgetedPFTE">Budgeted paid FTE (optional)</label>
+          <input type="number" step="any" min="0" id="f-budgetedPFTE" data-bind="budget.budgetedPFTE" placeholder="auto">
+        </div>
+        <div class="field">
+          <label for="f-daysPerYear">Days per year</label>
+          <input type="number" step="any" min="1" id="f-daysPerYear" data-bind="budget.daysPerYear">
+        </div>
+        <div class="field">
+          <label for="f-weeksPerYear">Weeks per year</label>
+          <input type="number" step="any" min="1" id="f-weeksPerYear" data-bind="budget.weeksPerYear">
+        </div>
+      </div>
+
+      <div class="stats" id="budget-stats"></div>
+    </div>
+  </section>
+
+  <!-- ============ Staffing grid ============ -->
+  <section class="card">
+    <h2>3 &nbsp;&middot;&nbsp; Staffing grid
+      <span class="h2-note">Enter the worked (productive) hours scheduled each day. Qty = number of people in that position.</span>
+    </h2>
+    <div class="card-body">
+      <div class="group" style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+        <button type="button" class="primary" id="btn-add-row">+ Add position</button>
+        <button type="button" id="btn-add-5">+ Add 5 rows</button>
+        <button type="button" id="btn-clear-rows" class="ghost-danger">Clear all positions</button>
+      </div>
+      <div class="table-wrap">
+        <table class="grid-table" id="grid-table">
+          <thead>
+            <tr>
+              <th style="min-width:150px">Role</th>
+              <th style="min-width:160px">Assigned to</th>
+              <th style="min-width:90px">Type</th>
+              <th style="min-width:110px">Shift</th>
+              <th style="min-width:60px">Qty</th>
+              <th class="day">Sun</th><th class="day">Mon</th><th class="day">Tue</th>
+              <th class="day">Wed</th><th class="day">Thu</th><th class="day">Fri</th><th class="day">Sat</th>
+              <th class="num">Hrs/wk<br>per person</th>
+              <th class="num">Total<br>hrs/wk</th>
+              <th class="num">Annual<br>worked hrs</th>
+              <th class="num">wFTE</th>
+              <th class="num">pFTE</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="grid-body"></tbody>
+          <tfoot id="grid-foot"></tfoot>
+        </table>
+      </div>
+      <div class="legend">
+        <code>wFTE</code> = total scheduled worked hours per week &divide; (FTE hours &divide; weeks per year) &nbsp;&middot;&nbsp;
+        <code>pFTE</code> = wFTE &times; benefit gross-up factor, so PTO coverage is included.
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Variance ============ -->
+  <section class="card">
+    <h2>4 &nbsp;&middot;&nbsp; Designed model vs budget</h2>
+    <div class="card-body">
+      <div class="stats" id="variance-stats"></div>
+      <div class="table-wrap" style="margin-top:14px">
+        <table id="variance-table">
+          <thead>
+            <tr><th style="text-align:left">Measure</th><th class="num">Designed model</th><th class="num">Budget</th>
+            <th class="num">Variance</th><th class="num">% of budget</th></tr>
+          </thead>
+          <tbody id="variance-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Productivity ============ -->
+  <section class="card">
+    <h2>5 &nbsp;&middot;&nbsp; Volume needed for 100% productivity
+      <span class="h2-note">Required volume = scheduled worked hours &divide; budgeted WHpU</span>
+    </h2>
+    <div class="tabs">
+      <button type="button" class="active" data-tab="tab-day">By day of week</button>
+      <button type="button" data-tab="tab-person">Per person, per day</button>
+    </div>
+    <div class="card-body">
+      <div class="stats" id="prod-stats"></div>
+
+      <div class="tab-panel active" id="tab-day" style="margin-top:14px">
+        <div class="table-wrap">
+          <table id="prod-day-table">
+            <thead>
+              <tr>
+                <th style="text-align:left">Day</th>
+                <th class="num">Scheduled worked hours</th>
+                <th class="num">8-hour equivalents</th>
+                <th class="num" id="th-required-day">Required volume @100%</th>
+                <th class="num" id="th-budgeted-day">Budgeted avg volume/day</th>
+                <th class="num">Variance</th>
+              </tr>
+            </thead>
+            <tbody id="prod-day-body"></tbody>
+            <tfoot id="prod-day-foot"></tfoot>
+          </table>
+        </div>
+        <div class="legend">A positive variance means the schedule on that day needs <em>more</em> volume than budget delivers &mdash; those hours will run below 100% productivity.</div>
+      </div>
+
+      <div class="tab-panel" id="tab-person" style="margin-top:14px">
+        <div class="table-wrap">
+          <table id="prod-person-table">
+            <thead>
+              <tr>
+                <th style="text-align:left">Role</th>
+                <th style="text-align:left">Assigned to</th>
+                <th style="text-align:left">Shift</th>
+                <th class="num">Qty</th>
+                <th class="num day">Sun</th><th class="num day">Mon</th><th class="num day">Tue</th>
+                <th class="num day">Wed</th><th class="num day">Thu</th><th class="num day">Fri</th><th class="num day">Sat</th>
+                <th class="num">Per person / week</th>
+                <th class="num">Row total / week</th>
+              </tr>
+            </thead>
+            <tbody id="prod-person-body"></tbody>
+            <tfoot id="prod-person-foot"></tfoot>
+          </table>
+        </div>
+        <div class="legend">Each cell is the volume <strong>one person</strong> in that position must cover on that day to hit 100% productivity at the budgeted WHpU.</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ Library modal ============ -->
+<div class="modal-backdrop" id="library-modal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="library-title">
+    <header>
+      <h3 id="library-title">Saved staffing models</h3>
+      <button type="button" class="close" data-close-modal>Close</button>
+    </header>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:12px">
+        <label for="lib-filter">Filter by department</label>
+        <input id="lib-filter" placeholder="Type to filter&hellip;">
+      </div>
+      <div class="lib-list" id="lib-list"></div>
+    </div>
+    <footer>
+      <span class="hint" id="lib-storage-note" style="margin-right:auto"></span>
+      <button type="button" data-close-modal>Close</button>
+    </footer>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- ============ Print / PDF report ============ -->
+<div id="print-report" aria-hidden="true"></div>
+
+<script src="assets/js/calc.js"></script>
+<script src="assets/js/xlsx.js"></script>
+<script src="assets/js/storage.js"></script>
+<script src="assets/js/export.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
